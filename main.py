@@ -2,51 +2,36 @@ import logging
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 import requests
-import os
 
-# Налаштування логування
+# Увімкнення логування
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-# Ваш токен
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_API_TOKEN = os.getenv("HF_API_TOKEN")  # Токен Hugging Face
-
-# Функція для генерації відповіді за допомогою Hugging Face
-def generate_response(message: str) -> str:
+# Функція для отримання відповіді з Hugging Face
+def get_response_from_hugging_face(prompt):
     headers = {
-        "Authorization": f"Bearer {HF_API_TOKEN}"
+        "Authorization": f"Bearer {HF_API_TOKEN}",
     }
     data = {
-        "inputs": message
+        "inputs": prompt,
     }
-    response = requests.post("https://api-inference.huggingface.co/models/gpt2", headers=headers, json=data)
+    response = requests.post("https://api-inference.huggingface.co/models/EleutherAI/gpt-neo-125M", headers=headers, json=data)
+    return response.json()
 
-    if response.status_code == 200:
-        return response.json()[0]['generated_text']
-    else:
-        return "Вибачте, я не зміг згенерувати відповідь."
+# Функція обробки повідомлень
+def handle_message(update: Update, context: CallbackContext) -> None:
+    user_message = update.message.text
+    if "Олєг" in user_message:
+        response_text = get_response_from_hugging_face(user_message)
+        update.message.reply_text(response_text['generated_text'])  # Адаптуйте це в залежності від формату відповіді
 
-# Функція для обробки текстових повідомлень
-def reply(update: Update, context: CallbackContext) -> None:
-    user_message = update.message.text  # Отримуємо текст повідомлення
-    logger.info(f"Received message: {user_message}")  # Логування отриманого повідомлення
-
-    # Генеруємо відповідь
-    response = generate_response(user_message)
-    update.message.reply_text(response)  # Відповідаємо користувачу
-
-# Головна функція, яка запускає бота
-def main() -> None:
-    updater = Updater(TELEGRAM_TOKEN)
-
-    # Отримуємо диспетчер для реєстрації обробників
+# Основна функція
+def main():
+    updater = Updater("7248649621:AAEENgDmHh4cUQ1VMaVumbs4WtGbzr2sUSY")
     dispatcher = updater.dispatcher
 
-    # Регистрируем обработчики
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, reply))
+    dispatcher.add_handler(CommandHandler("start", lambda update, context: update.message.reply_text("Привіт! Я бот, готовий до спілкування!")))
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
-    # Запускаємо бота
     updater.start_polling()
     updater.idle()
 
