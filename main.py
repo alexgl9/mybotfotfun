@@ -1,18 +1,50 @@
 import os
 import requests
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
-HF_API_TOKEN = os.getenv('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')  # Змінна середовища з токеном
-model_url = "https://api-inference.huggingface.co/models/gpt-neo-125M"
+# Вставте ваш токен Telegram
+TELEGRAM_TOKEN = '7248649621:AAEENgDmHh4cUQ1VMaVumbs4WtGbzr2sUSY'
+# Вставте ваш токен Hugging Face
+HUGGINGFACE_TOKEN = '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'
+# Вибрана модель
+MODEL_NAME = 'gpt-neo-125M'
 
-def test_hugging_face_token():
-    headers = {"Authorization": f"Bearer {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}"}
-    response = requests.post(model_url, headers=headers, json={"inputs": "Hello, how are you?"})
+def start(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text('Привіт! Я бот на базі ШІ. Чим можу допомогти?')
+
+def respond_to_message(update: Update, context: CallbackContext) -> None:
+    user_message = update.message.text
+    response = generate_response(user_message)
+    update.message.reply_text(response)
+
+def generate_response(user_message: str) -> str:
+    headers = {
+        'Authorization': f'Bearer {HUGGINGFACE_TOKEN}',
+        'Content-Type': 'application/json'
+    }
+    
+    payload = {
+        "inputs": user_message,
+        "options": {"use_cache": False}
+    }
+
+    response = requests.post(f'https://api-inference.huggingface.co/models/{MODEL_NAME}', headers=headers, json=payload)
+
     if response.status_code == 200:
-        print("Token is valid and the model is accessible.")
-        print("Response:", response.json())
+        return response.json()[0]['generated_text']
     else:
-        print("Failed to access the model.")
-        print("Status Code:", response.status_code)
-        print("Response:", response.json())
+        return "Вибачте, я не зміг отримати відповідь."
 
-test_hugging_face_token()
+def main() -> None:
+    updater = Updater(TELEGRAM_TOKEN)
+
+    dispatcher = updater.dispatcher
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, respond_to_message))
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
