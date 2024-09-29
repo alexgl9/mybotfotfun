@@ -1,51 +1,52 @@
-import logging
 import os
-import telegram
+import random
+import asyncio
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline
 
-# Налаштування логування
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+# Ініціалізація моделі Hugging Face
+generator = pipeline('text-generation', model='gpt2')
 
-# Hugging Face API
-HF_API_TOKEN = os.getenv('HF_API_TOKEN')
-generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M', token=HF_API_TOKEN)
+# Функція для генерації відповіді
+def generate_response(prompt):
+    response = generator(prompt, max_length=100, num_return_sequences=1)
+    return response[0]['generated_text']
 
-# Команда start
+# Обробник команди /start
 async def start(update: Update, context):
-    await update.message.reply_text('Привіт! Я чат-бот на базі штучного інтелекту.')
+    await update.message.reply_text('Привіт! Я AI бот, готовий спілкуватися.')
 
 # Обробник повідомлень
 async def handle_message(update: Update, context):
-    user_message = update.message.text
-    logger.info(f"Отримано повідомлення: {user_message}")
-    
-    # Генерація відповіді
-    response = generator(user_message, max_length=100, do_sample=True)[0]['generated_text']
-    logger.info(f"Відповідь AI: {response}")
+    message = update.message.text
+    chat_id = update.effective_chat.id
 
-    await update.message.reply_text(response)
+    # Перевірка, чи бот згаданий у повідомленні
+    if context.bot.username.lower() in message.lower():
+        response = generate_response(message)
+        await context.bot.send_message(chat_id=chat_id, text=response)
+    else:
+        # Випадкове втручання в розмову
+        if random.random() < 0.1:  # 10% шанс втрутитися
+            response = generate_response(message)
+            await context.bot.send_message(chat_id=chat_id, text=response)
 
-# Основна функція
+# Головна функція
 def main():
-    TOKEN = os.getenv("TELEGRAM_TOKEN")
-
-    application = ApplicationBuilder().token(TOKEN).build()
-
-    # Команди
-    application.add_handler(CommandHandler("start", start))
+    # Отримання токену з змінних середовища
+    telegram_token = os.getenv('TELEGRAM_TOKEN')
     
-    # Повідомлення
+    # Створення і налаштування застосунку
+    application = Application.builder().token(telegram_token).build()
+
+    # Додавання обробників
+    application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Запуск бота
-    logger.info("Бот запущений...")
     application.run_polling()
 
 if __name__ == '__main__':
     main()
+    
