@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Ініціалізація моделі Hugging Face GPT-Neo 125M
 try:
-    generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M')  # Використання GPT-Neo
+    generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M', pad_token_id=50256)  # Використання GPT-Neo
     logger.info("Hugging Face GPT-Neo model initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize Hugging Face model: {str(e)}")
@@ -29,9 +29,11 @@ def generate_response(prompt):
     if generator is None:
         return "Вибачте, я зараз не можу генерувати відповіді."
     try:
-        # Додаємо truncation=True і встановлюємо max_length
+        logger.info(f"Generating response for prompt: {prompt}")
         response = generator(prompt, max_length=100, num_return_sequences=1, truncation=True)
-        return response[0]['generated_text'].strip()  # Вирізаємо зайві пробіли
+        generated_text = response[0]['generated_text'].strip()  # Вирізаємо зайві пробіли
+        logger.info(f"Generated response: {generated_text}")
+        return generated_text
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
         return "Вибачте, сталася помилка при генерації відповіді."
