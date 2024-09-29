@@ -1,4 +1,4 @@
 Flask==2.0.2
 transformers==4.25.1
-tokenizers==0.13.3
+tokenizers==0.10.3  # Зміни на цю версію
 requests==2.26.0
