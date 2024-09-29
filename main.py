@@ -29,7 +29,8 @@ def generate_response(prompt):
     if generator is None:
         return "Вибачте, я зараз не можу генерувати відповіді."
     try:
-        response = generator(prompt, max_length=100, num_return_sequences=1)
+        # Додаємо truncation=True і встановлюємо max_length
+        response = generator(prompt, max_length=100, num_return_sequences=1, truncation=True)
         return response[0]['generated_text']
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
@@ -107,7 +108,7 @@ async def main():
 
         runner = web.AppRunner(app)
         await runner.setup()
-        port = int(os.environ.get('PORT', 10000))
+        port = int(os.environ.get('PORT', 10000))  # Використання змінної PORT для Render
         site = web.TCPSite(runner, '0.0.0.0', port)
         
         logger.info(f"Starting web server on port {port}")
