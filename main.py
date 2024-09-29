@@ -1,6 +1,7 @@
 import os
 import random
 import logging
+import sys
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline
@@ -10,22 +11,34 @@ import asyncio
 # Налаштування логування
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.DEBUG,
+    stream=sys.stdout
 )
 logger = logging.getLogger(__name__)
 
 # Ініціалізація моделі Hugging Face
-generator = pipeline('text-generation', model='gpt2')
+try:
+    generator = pipeline('text-generation', model='gpt2')
+    logger.info("Hugging Face model initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize Hugging Face model: {str(e)}")
+    generator = None
 
 # Функція для генерації відповіді
 def generate_response(prompt):
-    response = generator(prompt, max_length=100, num_return_sequences=1)
-    return response[0]['generated_text']
+    if generator is None:
+        return "Вибачте, я зараз не можу генерувати відповіді."
+    try:
+        response = generator(prompt, max_length=100, num_return_sequences=1)
+        return response[0]['generated_text']
+    except Exception as e:
+        logger.error(f"Error generating response: {str(e)}")
+        return "Вибачте, сталася помилка при генерації відповіді."
 
 # Обробник команди /start
 async def start(update: Update, context):
     logger.info(f"Received /start command from user {update.effective_user.id}")
-    await update.message.reply_text('Привіт сученьки! Я готова. давайте ригайте свої ригачки')
+    await update.message.reply_text('Привіт! Я AI бот, готовий спілкуватися в групі.')
 
 # Обробник повідомлень
 async def handle_message(update: Update, context):
@@ -36,25 +49,29 @@ async def handle_message(update: Update, context):
     # Отримання username бота
     bot_username = context.bot.username
 
-    # Перевірка, чи це групове повідомлення
-    if update.message.chat.type in ['group', 'supergroup']:
-        # Перевірка, чи бот згаданий у повідомленні або це відповідь на повідомлення бота
-        if (bot_username and bot_username.lower() in message.lower()) or \
-           (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id):
-            response = generate_response(message)
-            await context.bot.send_message(chat_id=chat_id, text=response, reply_to_message_id=update.message.message_id)
-            logger.info(f"Responded to message in group {chat_id}")
-        else:
-            # Випадкове втручання в розмову
-            if random.random() < 0.05:  # 5% шанс втрутитися
+    try:
+        # Перевірка, чи це групове повідомлення
+        if update.message.chat.type in ['group', 'supergroup']:
+            # Перевірка, чи бот згаданий у повідомленні або це відповідь на повідомлення бота
+            if (bot_username and bot_username.lower() in message.lower()) or \
+            (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id):
                 response = generate_response(message)
-                await context.bot.send_message(chat_id=chat_id, text=response)
-                logger.info(f"Randomly intervened in group {chat_id}")
-    else:
-        # Обробка особистих повідомлень
-        response = generate_response(message)
-        await context.bot.send_message(chat_id=chat_id, text=response)
-        logger.info(f"Responded to direct message from user {update.effective_user.id}")
+                await context.bot.send_message(chat_id=chat_id, text=response, reply_to_message_id=update.message.message_id)
+                logger.info(f"Responded to message in group {chat_id}")
+            else:
+                # Випадкове втручання в розмову
+                if random.random() < 0.05:  # 5% шанс втрутитися
+                    response = generate_response(message)
+                    await context.bot.send_message(chat_id=chat_id, text=response)
+                    logger.info(f"Randomly intervened in group {chat_id}")
+        else:
+            # Обробка особистих повідомлень
+            response = generate_response(message)
+            await context.bot.send_message(chat_id=chat_id, text=response)
+            logger.info(f"Responded to direct message from user {update.effective_user.id}")
+    except Exception as e:
+        logger.error(f"Error handling message: {str(e)}")
+        await context.bot.send_message(chat_id=chat_id, text="Вибачте, сталася помилка при обробці повідомлення.")
 
 # Обробник для веб-сервера
 async def handle_web_request(request):
@@ -94,8 +111,15 @@ async def main():
         site = web.TCPSite(runner, '0.0.0.0', port)
         
         logger.info(f"Starting web server on port {port}")
-        await asyncio.gather(run_bot(), site.start())
-        logger.info("Bot and web server started successfully")
+        await site.start()
+        logger.info("Web server started successfully")
+        
+        await run_bot()
+        logger.info("Bot started successfully")
+        
+        # Тримаємо програму працюючою
+        while True:
+            await asyncio.sleep(3600)  # Чекаємо годину перед наступною перевіркою
     except Exception as e:
         logger.error(f"Error occurred: {str(e)}", exc_info=True)
 
