@@ -1,50 +1,51 @@
 import logging
-import requests
+import os
+import telegram
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from transformers import pipeline
 
-# Встановлення логування
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Налаштування логування
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-# Ваш токен Telegram і токен Hugging Face
-TELEGRAM_TOKEN = '7248649621:AAEENgDmHh4cUQ1VMaVumbs4WtGbzr2sUSY'
-HUGGING_FACE_TOKEN = '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'
-MODEL_NAME = 'gpt-neo-125M'
+# Hugging Face API
+HF_API_TOKEN = os.getenv('HF_API_TOKEN')
+generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M', token=HF_API_TOKEN)
 
-def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Привіт! Я бот на базі штучного інтелекту. Як я можу вам допомогти?')
+# Команда start
+async def start(update: Update, context):
+    await update.message.reply_text('Привіт! Я чат-бот на базі штучного інтелекту.')
 
-def generate_response(message: str) -> str:
-    headers = {
-        "Authorization": f"Bearer {HUGGING_FACE_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "inputs": message,
-    }
-    response = requests.post(f"https://api-inference.huggingface.co/models/{MODEL_NAME}", headers=headers, json=payload)
-
-    if response.status_code == 200:
-        return response.json()[0]['generated_text']
-    else:
-        logging.error(f"Error from Hugging Face API: {response.status_code} - {response.text}")
-        return "Вибачте, я не зміг відповісти на ваше питання."
-
-def respond_to_message(update: Update, context: CallbackContext) -> None:
+# Обробник повідомлень
+async def handle_message(update: Update, context):
     user_message = update.message.text
-    logging.info(f'Received message: {user_message}')  # Логування отриманого повідомлення
-    response = generate_response(user_message)
-    update.message.reply_text(response)
+    logger.info(f"Отримано повідомлення: {user_message}")
+    
+    # Генерація відповіді
+    response = generator(user_message, max_length=100, do_sample=True)[0]['generated_text']
+    logger.info(f"Відповідь AI: {response}")
 
-def main() -> None:
-    updater = Updater(TELEGRAM_TOKEN)
+    await update.message.reply_text(response)
 
-    dispatcher = updater.dispatcher
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, respond_to_message))
+# Основна функція
+def main():
+    TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-    updater.start_polling()
-    updater.idle()
+    application = ApplicationBuilder().token(TOKEN).build()
+
+    # Команди
+    application.add_handler(CommandHandler("start", start))
+    
+    # Повідомлення
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Запуск бота
+    logger.info("Бот запущений...")
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
