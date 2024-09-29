@@ -14,22 +14,32 @@ def generate_response(prompt):
 
 # Обробник команди /start
 async def start(update: Update, context):
-    await update.message.reply_text('Привіт! Я AI бот, готовий спілкуватися.')
+    await update.message.reply_text('Привіт! Я AI бот, готовий спілкуватися в групі.')
 
 # Обробник повідомлень
 async def handle_message(update: Update, context):
     message = update.message.text
     chat_id = update.effective_chat.id
+    
+    # Отримання username бота
+    bot_username = context.bot.username
 
-    # Перевірка, чи бот згаданий у повідомленні
-    if context.bot.username.lower() in message.lower():
+    # Перевірка, чи це групове повідомлення
+    if update.message.chat.type in ['group', 'supergroup']:
+        # Перевірка, чи бот згаданий у повідомленні або це відповідь на повідомлення бота
+        if (bot_username and bot_username.lower() in message.lower()) or \
+           (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id):
+            response = generate_response(message)
+            await context.bot.send_message(chat_id=chat_id, text=response, reply_to_message_id=update.message.message_id)
+        else:
+            # Випадкове втручання в розмову
+            if random.random() < 0.05:  # 5% шанс втрутитися
+                response = generate_response(message)
+                await context.bot.send_message(chat_id=chat_id, text=response)
+    else:
+        # Обробка особистих повідомлень
         response = generate_response(message)
         await context.bot.send_message(chat_id=chat_id, text=response)
-    else:
-        # Випадкове втручання в розмову
-        if random.random() < 0.1:  # 10% шанс втрутитися
-            response = generate_response(message)
-            await context.bot.send_message(chat_id=chat_id, text=response)
 
 # Головна функція
 def main():
