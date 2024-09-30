@@ -60,15 +60,16 @@ async def handle_message(update: Update, context):
         await context.bot.send_message(chat_id=chat_id, text="Вибачте, сталася помилка при обробці повідомлення.")
 
 # Налаштування веб-хука
-def setup_webhook():
-    telegram_token = os.getenv('TELEGRAM_TOKEN')
-    webhook_url = f"https://mybotfotfun.onrender.com/{telegram_token}"  # Ваш URL для веб-хука
-    response = requests.post(f"https://api.telegram.org/bot{telegram_token}/setWebhook", data={'url': webhook_url})
-    
-    if response.status_code == 200:
-        logger.info(f"Webhook set successfully: {webhook_url}")
-    else:
-        logger.error(f"Failed to set webhook: {response.status_code} - {response.text}")
+async def webhook(request):
+    # Отримання тіла запиту
+    update = await request.json()
+    logger.info(f"Webhook received: {update}")
+
+    # Обробка оновлення
+    update = Update.de_json(update, telegram_bot)
+    await handle_message(update, telegram_bot)
+
+    return web.Response()
 
 # Головна функція для запуску бота
 async def main():
@@ -82,7 +83,6 @@ async def main():
 
         # Додавання обробників
         application.add_handler(CommandHandler("start", start))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
         # Налаштування веб-хука
         setup_webhook()
@@ -92,7 +92,7 @@ async def main():
 
         # Налаштування веб-сервера для обробки веб-хуків
         app = web.Application()
-        app.router.add_post(f"/{telegram_token}", handle_message)  # Обробляти веб-хуки тут
+        app.router.add_post(f"/{telegram_token}", webhook)  # Обробляти веб-хуки тут
 
         runner = web.AppRunner(app)
         await runner.setup()
