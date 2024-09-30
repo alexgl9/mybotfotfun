@@ -3,7 +3,7 @@ import logging
 import sys
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
 from aiohttp import web
 import asyncio
 
@@ -15,10 +15,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Ініціалізація моделі Hugging Face
+# Отримання токенів з змінних середовища
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+HF_API_TOKEN = os.getenv('HF_API_TOKEN')
+
+# Ініціалізація моделі Hugging Face DistilGPT-2
 try:
-    model_name = "distilgpt2"
-    generator = pipeline('text-generation', model=model_name)
+    tokenizer = AutoTokenizer.from_pretrained("distilgpt2", use_auth_token=HF_API_TOKEN)
+    model = AutoModelForCausalLM.from_pretrained("distilgpt2", use_auth_token=HF_API_TOKEN)
+    generator = pipeline('text-generation', model=model, tokenizer=tokenizer)
     logger.info("Hugging Face DistilGPT-2 model initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize Hugging Face model: {str(e)}")
@@ -48,13 +53,15 @@ async def handle_message(update: Update, context):
     logger.info(f"Received message from user {update.effective_user.id}: {update.message.text[:20]}...")
     message = update.message.text
     chat_id = update.effective_chat.id
+    
+    bot_username = context.bot.username
 
     try:
-        if (context.bot.username and context.bot.username.lower() in message.lower()) or \
-           (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id):
+        # Відповідає на питання, якщо згадано юзернейм бота
+        if (bot_username and bot_username.lower() in message.lower()):
             response = generate_response(message)
             await context.bot.send_message(chat_id=chat_id, text=response, reply_to_message_id=update.message.message_id)
-            logger.info(f"Responded to message in group {chat_id}")
+            logger.info(f"Responded to message in chat {chat_id}")
         else:
             logger.info("Message ignored due to missing mention.")
     except Exception as e:
@@ -64,24 +71,20 @@ async def handle_message(update: Update, context):
 # Головна функція
 async def main():
     try:
-        TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
         if not TELEGRAM_TOKEN:
             raise ValueError("TELEGRAM_TOKEN is not set")
 
         logger.info("Starting bot application...")
         application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-        # Додавання обробників
         application.add_handler(CommandHandler("start", start))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-        # Налаштування вебхука
         webhook_url = f"https://mybotfotfun.onrender.com/{TELEGRAM_TOKEN}"
+        await application.bot.set_webhook(webhook_url)
+        logger.info(f"Webhook set to {webhook_url}")
 
-        async def set_webhook():
-            await application.bot.set_webhook(webhook_url)
-            logger.info(f"Webhook set to {webhook_url}")
-
+        # Створення веб-сервера
         async def web_app():
             async def webhook_handler(request):
                 logger.info("Webhook received")
@@ -96,11 +99,10 @@ async def main():
 
             runner = web.AppRunner(app)
             await runner.setup()
-            site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 8443)))
+            site = web.TCPSite(runner, '0.0.0.0', 10000)  # Port for Render
             await site.start()
-            logger.info(f"Web app started on port {os.environ.get('PORT', 8443)}")
+            logger.info("Web app started on port 10000")
 
-        await set_webhook()
         await web_app()
         await application.start()
         logger.info("Bot started successfully")
