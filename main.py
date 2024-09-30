@@ -1,5 +1,4 @@
 import os
-import random
 import logging
 import sys
 from telegram import Update
@@ -7,6 +6,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline
 from aiohttp import web
 import asyncio
+import requests  # Для налаштування веб-хука
 
 # Налаштування логування
 logging.basicConfig(
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Ініціалізація моделі Hugging Face GPT-Neo 125M
 try:
-    generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M', pad_token_id=50256)  # Використання GPT-Neo
+    generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M', pad_token_id=50256)
     logger.info("Hugging Face GPT-Neo model initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize Hugging Face model: {str(e)}")
@@ -31,9 +31,7 @@ def generate_response(prompt):
     try:
         logger.info(f"Generating response for prompt: {prompt}")
         response = generator(prompt, max_length=100, num_return_sequences=1, truncation=True)
-        generated_text = response[0]['generated_text'].strip()  # Вирізаємо зайві пробіли
-        logger.info(f"Generated response: {generated_text}")
-        return generated_text
+        return response[0]['generated_text'].strip()
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
         return "Вибачте, сталася помилка при генерації відповіді."
@@ -48,81 +46,64 @@ async def handle_message(update: Update, context):
     logger.info(f"Received message from user {update.effective_user.id}: {update.message.text[:20]}...")
     message = update.message.text
     chat_id = update.effective_chat.id
-    
-    # Отримання username бота
     bot_username = context.bot.username
 
     try:
-        # Перевірка, чи це групове повідомлення
-        if update.message.chat.type in ['group', 'supergroup']:
-            # Перевірка, чи бот згаданий у повідомленні або це відповідь на повідомлення бота
-            if (bot_username and bot_username.lower() in message.lower()) or \
-            (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id):
-                response = generate_response(message)
-                await context.bot.send_message(chat_id=chat_id, text=response, reply_to_message_id=update.message.message_id)
-                logger.info(f"Responded to message in group {chat_id}")
-            else:
-                # Випадкове втручання в розмову
-                if random.random() < 0.05:  # 5% шанс втрутитися
-                    response = generate_response(message)
-                    await context.bot.send_message(chat_id=chat_id, text=response)
-                    logger.info(f"Randomly intervened in group {chat_id}")
-        else:
-            # Обробка особистих повідомлень
+        # Відповідь, якщо бот згаданий або відповідь на його повідомлення
+        if (bot_username and bot_username.lower() in message.lower()) or \
+           (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id):
             response = generate_response(message)
-            await context.bot.send_message(chat_id=chat_id, text=response)
-            logger.info(f"Responded to direct message from user {update.effective_user.id}")
+            await context.bot.send_message(chat_id=chat_id, text=response, reply_to_message_id=update.message.message_id)
+            logger.info(f"Responded to message in group {chat_id}")
     except Exception as e:
         logger.error(f"Error handling message: {str(e)}")
         await context.bot.send_message(chat_id=chat_id, text="Вибачте, сталася помилка при обробці повідомлення.")
 
-# Обробник для веб-сервера
-async def handle_web_request(request):
-    logger.info("Received web request")
-    return web.Response(text="Telegram bot is running!")
+# Налаштування веб-хука
+def setup_webhook():
+    telegram_token = os.getenv('TELEGRAM_TOKEN')
+    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_URL')}/{telegram_token}"
+    response = requests.post(f"https://api.telegram.org/bot{telegram_token}/setWebhook", data={'url': webhook_url})
+    
+    if response.status_code == 200:
+        logger.info(f"Webhook set successfully: {webhook_url}")
+    else:
+        logger.error(f"Failed to set webhook: {response.status_code} - {response.text}")
 
-# Головна функція
+# Головна функція для запуску бота
 async def main():
     try:
-        # Отримання токену з змінних середовища
         telegram_token = os.getenv('TELEGRAM_TOKEN')
         if not telegram_token:
             raise ValueError("TELEGRAM_TOKEN is not set")
-        
-        logger.info("Starting bot application...")
-        # Створення і налаштування застосунку
+
+        # Створення застосунку
         application = Application.builder().token(telegram_token).build()
 
         # Додавання обробників
         application.add_handler(CommandHandler("start", start))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-        # Налаштування веб-сервера
-        app = web.Application()
-        app.router.add_get('/', handle_web_request)
+        # Налаштування веб-хука
+        setup_webhook()
 
-        # Запуск бота і веб-сервера
-        async def run_bot():
-            await application.initialize()
-            await application.start()
-            await application.updater.start_polling()
-            logger.info("Bot polling started")
+        # Налаштування веб-сервера для обробки веб-хуків
+        app = web.Application()
+        app.router.add_post(f"/{telegram_token}", handle_message)  # Обробляти веб-хуки тут
 
         runner = web.AppRunner(app)
         await runner.setup()
-        port = int(os.environ.get('PORT', 10000))  # Використання змінної PORT для Render
+        port = int(os.environ.get('PORT', 10000))  # Використання порту для веб-хука
         site = web.TCPSite(runner, '0.0.0.0', port)
-        
-        logger.info(f"Starting web server on port {port}")
+
+        logger.info(f"Starting webhook on port {port}")
         await site.start()
-        logger.info("Web server started successfully")
-        
-        await run_bot()
-        logger.info("Bot started successfully")
-        
-        # Тримаємо програму працюючою
+
+        logger.info("Bot started successfully with webhooks")
+        await application.start()
+
         while True:
-            await asyncio.sleep(3600)  # Чекаємо годину перед наступною перевіркою
+            await asyncio.sleep(3600)  # Тримаємо програму працюючою
     except Exception as e:
         logger.error(f"Error occurred: {str(e)}", exc_info=True)
 
