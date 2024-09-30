@@ -1,12 +1,12 @@
 import os
 import logging
 import sys
+import requests  # Імпорт модуля requests для роботи з веб-хуками
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline
 from aiohttp import web
 import asyncio
-import json
 
 # Налаштування логування
 logging.basicConfig(
@@ -31,7 +31,7 @@ def generate_response(prompt):
     try:
         logger.info(f"Generating response for prompt: {prompt}")
         response = generator(prompt, max_length=100, num_return_sequences=1, truncation=True)
-        return response[0]['generated_text'].strip()
+        return response[0]['generated_text'].strip()  # Вирізаємо зайві пробіли
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
         return "Вибачте, сталася помилка при генерації відповіді."
@@ -58,19 +58,6 @@ async def handle_message(update: Update, context):
     except Exception as e:
         logger.error(f"Error handling message: {str(e)}")
         await context.bot.send_message(chat_id=chat_id, text="Вибачте, сталася помилка при обробці повідомлення.")
-
-# Обробник для веб-сервера
-async def handle_webhook(request):
-    try:
-        # Отримуємо дані з запиту веб-хука
-        data = await request.json()
-        update = Update.de_json(data, Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build().bot)
-        # Передаємо оновлення в бот для обробки
-        await Application.process_update(update)
-        return web.Response(text="Webhook received", status=200)
-    except Exception as e:
-        logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
-        return web.Response(text="Error processing webhook", status=500)
 
 # Налаштування веб-хука
 def setup_webhook():
@@ -105,7 +92,7 @@ async def main():
 
         # Налаштування веб-сервера для обробки веб-хуків
         app = web.Application()
-        app.router.add_post(f"/{telegram_token}", handle_webhook)  # Обробляти веб-хуки тут
+        app.router.add_post(f"/{telegram_token}", handle_message)  # Обробляти веб-хуки тут
 
         runner = web.AppRunner(app)
         await runner.setup()
