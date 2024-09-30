@@ -1,11 +1,10 @@
 import os
-import random
 import logging
 import sys
+from aiohttp import web
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
-from aiohttp import web
 import asyncio
 
 # Налаштування логування
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Отримання токенів з змінних середовища
 HF_API_TOKEN = os.getenv('HF_API_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-PORT = int(os.getenv('PORT', 443))  # Використовуємо стандартний порт HTTPS
+PORT = int(os.getenv('PORT', 8443))  # Отримання порту з змінної середовища або 8443 за замовчуванням
 
 # Ініціалізація моделі Hugging Face DistilGPT-2
 try:
@@ -27,12 +26,6 @@ try:
     model = AutoModelForCausalLM.from_pretrained("distilgpt2", token=HF_API_TOKEN)
     generator = pipeline('text-generation', model=model, tokenizer=tokenizer)
     logger.info("Hugging Face DistilGPT-2 model initialized successfully")
-    
-    # Тест генерації відповіді
-    test_prompt = "Hello, how are you?"
-    test_response = generator(test_prompt, max_length=50, num_return_sequences=1, truncation=True)
-    logger.info(f"Test response: {test_response[0]['generated_text']}")
-
 except Exception as e:
     logger.error(f"Failed to initialize Hugging Face model: {str(e)}")
     generator = None
@@ -44,9 +37,7 @@ def generate_response(prompt):
         return "Вибачте, я зараз не можу генерувати відповіді."
     try:
         response = generator(prompt, max_length=100, num_return_sequences=1, truncation=True)
-        generated_text = response[0]['generated_text'].strip()
-        logger.info(f"Generated response: {generated_text}")
-        return generated_text
+        return response[0]['generated_text'].strip()
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
         return "Вибачте, сталася помилка при генерації відповіді."
@@ -74,7 +65,7 @@ async def handle_message(update: Update, context):
     logger.info(f"Received message from user {update.effective_user.id}: {update.message.text[:20]}...")
     message = update.message.text
     chat_id = update.effective_chat.id
-    
+
     bot_username = context.bot.username
 
     try:
