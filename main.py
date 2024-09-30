@@ -1,7 +1,7 @@
 import os
 import logging
 import sys
-import requests  # Для роботи з веб-хуками
+import requests
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline
@@ -67,9 +67,8 @@ async def handle_message(update: Update, context):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Вибачте, сталася помилка при обробці повідомлення.")
 
 # Налаштування веб-хука
-def setup_webhook():
+def setup_webhook(telegram_token):
     try:
-        telegram_token = os.getenv('TELEGRAM_TOKEN')
         webhook_url = f"https://mybotfotfun.onrender.com/{telegram_token}"  # URL для веб-хука
         response = requests.post(f"https://api.telegram.org/bot{telegram_token}/setWebhook", data={'url': webhook_url})
 
@@ -84,12 +83,12 @@ def setup_webhook():
 async def webhook(request):
     try:
         # Отримання тіла запиту
-        update = await request.json()
-        logger.info(f"Webhook received: {update}")
+        update_data = await request.json()
+        logger.info(f"Webhook received: {update_data}")
 
         # Обробка оновлення
-        update = Update.de_json(update, telegram_bot)
-        await handle_message(update, telegram_bot)
+        update = Update.de_json(update_data, bot)
+        await bot.process_update(update)
 
         return web.Response()
     except Exception as e:
@@ -110,7 +109,7 @@ async def main():
         application.add_handler(CommandHandler("start", start))
 
         # Налаштування веб-хука
-        setup_webhook()
+        setup_webhook(telegram_token)
 
         # Ініціалізація бота перед стартом
         await application.initialize()
@@ -130,8 +129,9 @@ async def main():
         logger.info("Bot started successfully with webhooks")
         await application.start()
 
+        # Тримаємо програму працюючою
         while True:
-            await asyncio.sleep(3600)  # Тримаємо програму працюючою
+            await asyncio.sleep(3600)
     except Exception as e:
         logger.error(f"Error occurred: {str(e)}", exc_info=True)
 
