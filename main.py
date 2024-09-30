@@ -6,7 +6,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline
 from aiohttp import web
 import asyncio
-import requests  # Для налаштування веб-хука
+import json
 
 # Налаштування логування
 logging.basicConfig(
@@ -59,6 +59,19 @@ async def handle_message(update: Update, context):
         logger.error(f"Error handling message: {str(e)}")
         await context.bot.send_message(chat_id=chat_id, text="Вибачте, сталася помилка при обробці повідомлення.")
 
+# Обробник для веб-сервера
+async def handle_webhook(request):
+    try:
+        # Отримуємо дані з запиту веб-хука
+        data = await request.json()
+        update = Update.de_json(data, Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build().bot)
+        # Передаємо оновлення в бот для обробки
+        await Application.process_update(update)
+        return web.Response(text="Webhook received", status=200)
+    except Exception as e:
+        logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
+        return web.Response(text="Error processing webhook", status=500)
+
 # Налаштування веб-хука
 def setup_webhook():
     telegram_token = os.getenv('TELEGRAM_TOKEN')
@@ -92,11 +105,11 @@ async def main():
 
         # Налаштування веб-сервера для обробки веб-хуків
         app = web.Application()
-        app.router.add_post(f"/{telegram_token}", handle_message)  # Обробляти веб-хуки тут
+        app.router.add_post(f"/{telegram_token}", handle_webhook)  # Обробляти веб-хуки тут
 
         runner = web.AppRunner(app)
         await runner.setup()
-        port = int(os.environ.get('PORT', 10000))  # Використання порту, наданого Render
+        port = int(os.environ.get('PORT', 10000))  # Використання порту для веб-хука
         site = web.TCPSite(runner, '0.0.0.0', port)
 
         logger.info(f"Starting webhook on port {port}")
