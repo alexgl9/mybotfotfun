@@ -10,7 +10,7 @@ import asyncio
 
 # Налаштування логування
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(name)s - %(levelень)s - %(message)s',
     level=logging.INFO,
     stream=sys.stdout
 )
@@ -74,9 +74,12 @@ async def main():
 
         # Налаштування веб-сервера
         app = web.Application()
-        app.router.add_post(f'/{TELEGRAM_TOKEN}', lambda request: application.update_queue.put(
-            Update.de_json(data=await request.json(), bot=application.bot)
-        ))
+        async def webhook_handler(request):
+            update = Update.de_json(await request.json(), bot=application.bot)
+            await application.update_queue.put(update)
+            return web.Response()
+
+        app.router.add_post(f'/{TELEGRAM_TOKEN}', webhook_handler)
         app.router.add_get('/', lambda request: web.Response(text="Telegram bot is running!"))
 
         runner = web.AppRunner(app)
