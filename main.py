@@ -19,13 +19,13 @@ logger = logging.getLogger(__name__)
 # Отримання токенів з змінних середовища
 HF_API_TOKEN = os.getenv('HF_API_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-PORT = int(os.getenv('PORT', 8080))
+PORT = int(os.getenv('PORT', 8443))  # Зазвичай для вебхуків використовують порт 8443
 
 # Ініціалізація моделі Hugging Face DistilGPT-2
 try:
-    tokenizer = AutoTokenizer.from_pretrained("distilgpt2", token=HF_API_TOKEN)
-    model = AutoModelForCausalLM.from_pretrained("distilgpt2", token=HF_API_TOKEN)
-    generator = pipeline('text-generation', model=model, tokenizer=tokenizer)
+    tokenizer = AutoTokenizer.from_pretrained("distilgpt2", use_auth_token=HF_API_TOKEN)
+    model = AutoModelForCausalLM.from_pretrained("distilgpt2", use_auth_token=HF_API_TOKEN)
+    generator = pipeline('text-generation', model=model, tokenizer=tokenizer, pad_token_id=tokenizer.eos_token_id)  # Налаштування pad_token_id
     logger.info("Hugging Face DistilGPT-2 model initialized successfully")
     
     # Тест генерації відповіді
@@ -43,8 +43,10 @@ def generate_response(prompt):
     if generator is None:
         return "Вибачте, я зараз не можу генерувати відповіді."
     try:
-        response = generator(prompt, max_length=100, num_return_sequences=1, truncation=True)
-        generated_text = response[0]['generated_text'].strip()
+        # Додаємо промпт у форматі запиту
+        full_prompt = f"User: {prompt}\nAI:"
+        response = generator(full_prompt, max_length=100, num_return_sequences=1, truncation=True)
+        generated_text = response[0]['generated_text'].strip().replace(prompt, "").strip()  # Забираємо початковий промпт із відповіді
         logger.info(f"Generated response: {generated_text}")
         return generated_text
     except Exception as e:
@@ -130,7 +132,7 @@ async def main():
             
             runner = web.AppRunner(app)
             await runner.setup()
-            site = web.TCPSite(runner, '0.0.0.0', PORT)
+            site = web.TCPSite(runner, '0.0.0.0', PORT)  # Використання коректного порту
             await site.start()
             logger.info(f"Web app started on port {PORT}")
 
