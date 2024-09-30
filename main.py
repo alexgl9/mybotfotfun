@@ -1,10 +1,10 @@
 import os
 import logging
 import sys
-from aiohttp import web
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
+from aiohttp import web
 import asyncio
 
 # Налаштування логування
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Отримання токенів з змінних середовища
 HF_API_TOKEN = os.getenv('HF_API_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-PORT = int(os.getenv('PORT', 8443))  # Отримання порту з змінної середовища або 8443 за замовчуванням
+PORT = int(os.getenv('PORT', 10000))
 
 # Ініціалізація моделі Hugging Face DistilGPT-2
 try:
@@ -37,55 +37,32 @@ def generate_response(prompt):
         return "Вибачте, я зараз не можу генерувати відповіді."
     try:
         response = generator(prompt, max_length=100, num_return_sequences=1, truncation=True)
-        return response[0]['generated_text'].strip()
+        generated_text = response[0]['generated_text'].strip()
+        logger.info(f"Generated response: {generated_text}")
+        return generated_text
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
         return "Вибачте, сталася помилка при генерації відповіді."
-
-# Змінна для зберігання характеру бота
-character_prompt = "Я бот, який відповідає на запитання про життя."
 
 # Обробник команди /start
 async def start(update: Update, context):
     logger.info(f"Received /start command from user {update.effective_user.id}")
     await update.message.reply_text('Привіт! Я AI бот, готовий спілкуватися в групі.')
 
-# Обробник команди /set_character
-async def set_character(update: Update, context):
-    global character_prompt
-    if context.args:
-        character_prompt = ' '.join(context.args)
-        await update.message.reply_text(f"Характер бота змінено на: {character_prompt}")
-        logger.info(f"Character prompt set to: {character_prompt}")
-    else:
-        await update.message.reply_text("Будь ласка, надайте новий характер для бота.")
-
 # Обробник повідомлень
 async def handle_message(update: Update, context):
-    logger.info(f"Received message from user {update.effective_user.id}: {update.message.text[:20]}...")
+    logger.info(f"Received message from user {update.effective_user.id}: {update.message.text}")
     message = update.message.text
     chat_id = update.effective_chat.id
-
-    bot_username = context.bot.username
-
+    
     try:
-        if update.message.chat.type in ['group', 'supergroup']:
-            if (bot_username and bot_username.lower() in message.lower()) or \
-            (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id):
-                response = generate_response(f"{character_prompt} {message}")
-                await context.bot.send_message(chat_id=chat_id, text=response, reply_to_message_id=update.message.message_id)
-                logger.info(f"Responded to message in group {chat_id}")
-            elif random.random() < 0.05:
-                response = generate_response(f"{character_prompt} {message}")
-                await context.bot.send_message(chat_id=chat_id, text=response)
-                logger.info(f"Randomly intervened in group {chat_id}")
+        # Перевірка, чи бот згаданий у повідомленні або якщо це особисте повідомлення
+        if 'дарина' in message.lower() or context.bot.username.lower() in message.lower():
+            response = generate_response(message)
+            await context.bot.send_message(chat_id=chat_id, text=response)
+            logger.info(f"Responded to message in chat {chat_id}")
         else:
-            if message.lower().startswith("дарина"):
-                response = generate_response(f"{character_prompt} {message}")
-                await context.bot.send_message(chat_id=chat_id, text=response)
-                logger.info(f"Responded to direct message from user {update.effective_user.id}")
-            else:
-                logger.info("Message ignored due to username mention requirements.")
+            logger.info(f"Ignored message in chat {chat_id}")
     except Exception as e:
         logger.error(f"Error handling message: {str(e)}")
         await context.bot.send_message(chat_id=chat_id, text="Вибачте, сталася помилка при обробці повідомлення.")
@@ -100,9 +77,9 @@ async def main():
         application = Application.builder().token(TELEGRAM_TOKEN).build()
 
         application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("set_character", set_character))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+        # Вебхук
         webhook_url = f"https://mybotfotfun.onrender.com/{TELEGRAM_TOKEN}"
         
         logger.info(f"Setting up webhook on port {PORT}")
@@ -110,9 +87,9 @@ async def main():
         
         async def web_app():
             async def webhook_handler(request):
-                await application.update_queue.put(
-                    Update.de_json(data=await request.json(), bot=application.bot)
-                )
+                update = Update.de_json(data=await request.json(), bot=application.bot)
+                logger.info(f"Webhook received: {update}")
+                await application.update_queue.put(update)
                 return web.Response()
 
             app = web.Application()
