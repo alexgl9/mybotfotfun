@@ -62,7 +62,7 @@ async def handle_message(update: Update, context):
 # Налаштування веб-хука
 def setup_webhook():
     telegram_token = os.getenv('TELEGRAM_TOKEN')
-    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_URL')}/{telegram_token}"
+    webhook_url = f"https://mybotfotfun.onrender.com/{telegram_token}"  # Ваш URL для веб-хука
     response = requests.post(f"https://api.telegram.org/bot{telegram_token}/setWebhook", data={'url': webhook_url})
     
     if response.status_code == 200:
@@ -87,13 +87,16 @@ async def main():
         # Налаштування веб-хука
         setup_webhook()
 
+        # Ініціалізація бота перед стартом
+        await application.initialize()
+
         # Налаштування веб-сервера для обробки веб-хуків
         app = web.Application()
         app.router.add_post(f"/{telegram_token}", handle_message)  # Обробляти веб-хуки тут
 
         runner = web.AppRunner(app)
         await runner.setup()
-        port = int(os.environ.get('PORT', 10000))  # Використання порту для веб-хука
+        port = int(os.environ.get('PORT', 10000))  # Використання порту, наданого Render
         site = web.TCPSite(runner, '0.0.0.0', port)
 
         logger.info(f"Starting webhook on port {port}")
