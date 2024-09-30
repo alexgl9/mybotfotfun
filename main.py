@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Отримання токенів з змінних середовища
 HF_API_TOKEN = os.getenv('HF_API_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-PORT = int(os.getenv('PORT', 8443))  # Використання порту зі змінної середовища
+PORT = int(os.getenv('PORT', 443))  # Використовуємо стандартний порт HTTPS
 
 # Ініціалізація моделі Hugging Face DistilGPT-2
 try:
