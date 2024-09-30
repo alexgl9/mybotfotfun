@@ -1,11 +1,12 @@
 import os
+import random
 import logging
 import sys
-import requests
-from telegram import Update
+from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline
 from aiohttp import web
+import requests
 import asyncio
 
 # Налаштування логування
@@ -101,6 +102,9 @@ async def main():
         telegram_token = os.getenv('TELEGRAM_TOKEN')
         if not telegram_token:
             raise ValueError("TELEGRAM_TOKEN is not set")
+        
+        global bot
+        bot = Bot(token=telegram_token)
 
         # Створення застосунку
         application = Application.builder().token(telegram_token).build()
