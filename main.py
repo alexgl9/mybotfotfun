@@ -2,7 +2,7 @@ import os
 import random
 import logging
 import sys
-from telegram import Update, Bot
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline
 from aiohttp import web
@@ -87,9 +87,9 @@ async def webhook(request):
         update_data = await request.json()
         logger.info(f"Webhook received: {update_data}")
 
-        # Обробка оновлення
-        update = Update.de_json(update_data, bot)
-        await bot.process_update(update)
+        # Створюємо об'єкт Update для обробки повідомлень
+        update = Update.de_json(update_data, application.bot)
+        await application.process_update(update)
 
         return web.Response()
     except Exception as e:
@@ -102,11 +102,8 @@ async def main():
         telegram_token = os.getenv('TELEGRAM_TOKEN')
         if not telegram_token:
             raise ValueError("TELEGRAM_TOKEN is not set")
-        
-        global bot
-        bot = Bot(token=telegram_token)
 
-        # Створення застосунку
+        global application
         application = Application.builder().token(telegram_token).build()
 
         # Додавання обробників
