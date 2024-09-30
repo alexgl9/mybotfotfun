@@ -4,7 +4,7 @@ import logging
 import sys
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
 from aiohttp import web
 import asyncio
 
@@ -16,14 +16,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Отримання токенів з змінних середовища
+HF_API_TOKEN = os.getenv('HF_API_TOKEN')
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+PORT = int(os.getenv('PORT', 10000))
+
 # Ініціалізація моделі Hugging Face DistilGPT-2
 try:
-    generator = pipeline('text-generation', model='distilgpt2')
+    tokenizer = AutoTokenizer.from_pretrained("distilgpt2", use_auth_token=HF_API_TOKEN)
+    model = AutoModelForCausalLM.from_pretrained("distilgpt2", use_auth_token=HF_API_TOKEN)
+    generator = pipeline('text-generation', model=model, tokenizer=tokenizer)
     logger.info("Hugging Face DistilGPT-2 model initialized successfully")
     
     # Тест генерації відповіді
     test_prompt = "Hello, how are you?"
-    test_response = generator(test_prompt, max_length=50, num_return_sequences=1, pad_token_id=50256)
+    test_response = generator(test_prompt, max_length=50, num_return_sequences=1)
     logger.info(f"Test response: {test_response[0]['generated_text']}")
 
 except Exception as e:
@@ -36,7 +43,7 @@ def generate_response(prompt):
     if generator is None:
         return "Вибачте, я зараз не можу генерувати відповіді."
     try:
-        response = generator(prompt, max_length=100, num_return_sequences=1, pad_token_id=50256, truncation=True)
+        response = generator(prompt, max_length=100, num_return_sequences=1)
         generated_text = response[0]['generated_text'].strip()
         logger.info(f"Generated response: {generated_text}")
         return generated_text
@@ -74,16 +81,16 @@ async def handle_message(update: Update, context):
         if update.message.chat.type in ['group', 'supergroup']:
             if (bot_username and bot_username.lower() in message.lower()) or \
             (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id):
-                response = generate_response(message)
+                response = generate_response(f"{character_prompt} {message}")
                 await context.bot.send_message(chat_id=chat_id, text=response, reply_to_message_id=update.message.message_id)
                 logger.info(f"Responded to message in group {chat_id}")
             elif random.random() < 0.05:
-                response = generate_response(message)
+                response = generate_response(f"{character_prompt} {message}")
                 await context.bot.send_message(chat_id=chat_id, text=response)
                 logger.info(f"Randomly intervened in group {chat_id}")
         else:
             if message.lower().startswith("дарина"):
-                response = generate_response(message)
+                response = generate_response(f"{character_prompt} {message}")
                 await context.bot.send_message(chat_id=chat_id, text=response)
                 logger.info(f"Responded to direct message from user {update.effective_user.id}")
             else:
@@ -98,19 +105,17 @@ async def handle_web_request(request):
 
 # Налаштування вебхука
 async def setup_webhook(application, webhook_url):
-    telegram_token = os.getenv('TELEGRAM_TOKEN')
     await application.bot.set_webhook(webhook_url)
     logger.info(f"Webhook set to: {webhook_url}")
 
 # Головна функція
 async def main():
     try:
-        telegram_token = os.getenv('TELEGRAM_TOKEN')
-        if not telegram_token:
+        if not TELEGRAM_TOKEN:
             raise ValueError("TELEGRAM_TOKEN is not set")
         
         logger.info("Starting bot application...")
-        application = Application.builder().token(telegram_token).build()
+        application = Application.builder().token(TELEGRAM_TOKEN).build()
 
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("set_character", set_character))
@@ -119,7 +124,7 @@ async def main():
         app = web.Application()
         app.router.add_get('/', handle_web_request)
 
-        webhook_url = f"https://mybotfotfun.onrender.com/{telegram_token}"
+        webhook_url = f"https://mybotfotfun.onrender.com/{TELEGRAM_TOKEN}"
         await setup_webhook(application, webhook_url)
 
         async def run_bot():
@@ -130,10 +135,9 @@ async def main():
 
         runner = web.AppRunner(app)
         await runner.setup()
-        port = int(os.environ.get('PORT', 10000))
-        site = web.TCPSite(runner, '0.0.0.0', port)
+        site = web.TCPSite(runner, '0.0.0.0', PORT)
         
-        logger.info(f"Starting web server on port {port}")
+        logger.info(f"Starting web server on port {PORT}")
         await site.start()
         logger.info("Web server started successfully")
         
