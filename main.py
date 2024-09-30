@@ -19,18 +19,18 @@ logger = logging.getLogger(__name__)
 # Отримання токенів з змінних середовища
 HF_API_TOKEN = os.getenv('HF_API_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-PORT = int(os.getenv('PORT', 8443))  # Зазвичай для вебхуків використовують порт 8443
+PORT = int(os.getenv('PORT', 8443))  # Використання порту зі змінної середовища
 
 # Ініціалізація моделі Hugging Face DistilGPT-2
 try:
-    tokenizer = AutoTokenizer.from_pretrained("distilgpt2", use_auth_token=HF_API_TOKEN)
-    model = AutoModelForCausalLM.from_pretrained("distilgpt2", use_auth_token=HF_API_TOKEN)
-    generator = pipeline('text-generation', model=model, tokenizer=tokenizer, pad_token_id=tokenizer.eos_token_id)  # Налаштування pad_token_id
+    tokenizer = AutoTokenizer.from_pretrained("distilgpt2", token=HF_API_TOKEN)
+    model = AutoModelForCausalLM.from_pretrained("distilgpt2", token=HF_API_TOKEN)
+    generator = pipeline('text-generation', model=model, tokenizer=tokenizer)
     logger.info("Hugging Face DistilGPT-2 model initialized successfully")
     
     # Тест генерації відповіді
     test_prompt = "Hello, how are you?"
-    test_response = generator(test_prompt, max_length=50, num_return_sequences=1)
+    test_response = generator(test_prompt, max_length=50, num_return_sequences=1, truncation=True)
     logger.info(f"Test response: {test_response[0]['generated_text']}")
 
 except Exception as e:
@@ -43,10 +43,8 @@ def generate_response(prompt):
     if generator is None:
         return "Вибачте, я зараз не можу генерувати відповіді."
     try:
-        # Додаємо промпт у форматі запиту
-        full_prompt = f"User: {prompt}\nAI:"
-        response = generator(full_prompt, max_length=100, num_return_sequences=1, truncation=True)
-        generated_text = response[0]['generated_text'].strip().replace(prompt, "").strip()  # Забираємо початковий промпт із відповіді
+        response = generator(prompt, max_length=100, num_return_sequences=1, truncation=True)
+        generated_text = response[0]['generated_text'].strip()
         logger.info(f"Generated response: {generated_text}")
         return generated_text
     except Exception as e:
@@ -132,7 +130,7 @@ async def main():
             
             runner = web.AppRunner(app)
             await runner.setup()
-            site = web.TCPSite(runner, '0.0.0.0', PORT)  # Використання коректного порту
+            site = web.TCPSite(runner, '0.0.0.0', PORT)
             await site.start()
             logger.info(f"Web app started on port {PORT}")
 
