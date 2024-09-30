@@ -19,12 +19,12 @@ logger = logging.getLogger(__name__)
 # Отримання токенів з змінних середовища
 HF_API_TOKEN = os.getenv('HF_API_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-PORT = int(os.getenv('PORT', 10000))
+PORT = int(os.getenv('PORT', 8080))
 
 # Ініціалізація моделі Hugging Face DistilGPT-2
 try:
-    tokenizer = AutoTokenizer.from_pretrained("distilgpt2", use_auth_token=HF_API_TOKEN)
-    model = AutoModelForCausalLM.from_pretrained("distilgpt2", use_auth_token=HF_API_TOKEN)
+    tokenizer = AutoTokenizer.from_pretrained("distilgpt2", token=HF_API_TOKEN)
+    model = AutoModelForCausalLM.from_pretrained("distilgpt2", token=HF_API_TOKEN)
     generator = pipeline('text-generation', model=model, tokenizer=tokenizer)
     logger.info("Hugging Face DistilGPT-2 model initialized successfully")
     
@@ -43,7 +43,7 @@ def generate_response(prompt):
     if generator is None:
         return "Вибачте, я зараз не можу генерувати відповіді."
     try:
-        response = generator(prompt, max_length=100, num_return_sequences=1)
+        response = generator(prompt, max_length=100, num_return_sequences=1, truncation=True)
         generated_text = response[0]['generated_text'].strip()
         logger.info(f"Generated response: {generated_text}")
         return generated_text
@@ -99,15 +99,6 @@ async def handle_message(update: Update, context):
         logger.error(f"Error handling message: {str(e)}")
         await context.bot.send_message(chat_id=chat_id, text="Вибачте, сталася помилка при обробці повідомлення.")
 
-# Обробник для веб-сервера
-async def handle_web_request(request):
-    return web.Response(text="Telegram bot is running!")
-
-# Налаштування вебхука
-async def setup_webhook(application, webhook_url):
-    await application.bot.set_webhook(webhook_url)
-    logger.info(f"Webhook set to: {webhook_url}")
-
 # Головна функція
 async def main():
     try:
@@ -121,27 +112,29 @@ async def main():
         application.add_handler(CommandHandler("set_character", set_character))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-        app = web.Application()
-        app.router.add_get('/', handle_web_request)
-
         webhook_url = f"https://mybotfotfun.onrender.com/{TELEGRAM_TOKEN}"
-        await setup_webhook(application, webhook_url)
-
-        async def run_bot():
-            await application.initialize()
-            await application.start()
-            await application.updater.start_polling()
-            logger.info("Bot polling started")
-
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', PORT)
         
-        logger.info(f"Starting web server on port {PORT}")
-        await site.start()
-        logger.info("Web server started successfully")
+        logger.info(f"Setting up webhook on port {PORT}")
+        await application.bot.set_webhook(webhook_url)
         
-        await run_bot()
+        async def web_app():
+            async def webhook_handler(request):
+                await application.update_queue.put(
+                    Update.de_json(data=await request.json(), bot=application.bot)
+                )
+                return web.Response()
+
+            app = web.Application()
+            app.router.add_post(f'/{TELEGRAM_TOKEN}', webhook_handler)
+            app.router.add_get('/', lambda request: web.Response(text="Telegram bot is running!"))
+            
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, '0.0.0.0', PORT)
+            await site.start()
+            logger.info(f"Web app started on port {PORT}")
+
+        await web_app()
         logger.info("Bot started successfully")
         
         while True:
