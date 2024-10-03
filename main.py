@@ -4,7 +4,6 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline, set_seed
-import asyncio
 
 # Налаштування логування
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
@@ -63,7 +62,7 @@ async def handle_message(update: Update, context):
         logger.error(f"Помилка при обробці повідомлення: {e}", exc_info=True)
         await message.reply_text("Вибачте, сталася помилка при обробці вашого повідомлення.")
 
-async def main():
+def main():
     # Отримання токена з змінної середовища
     token = os.environ.get('TELEGRAM_TOKEN')
     if not token:
@@ -80,11 +79,9 @@ async def main():
         
         # Запуск бота
         logger.info("Бот запускається...")
-        await application.initialize()
-        await application.start()
-        await application.run_polling()
+        application.run_polling()
     except Exception as e:
         logger.error(f"Помилка при запуску бота: {e}", exc_info=True)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
