@@ -1,6 +1,6 @@
 import os
-import random
 import logging
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline
@@ -14,7 +14,7 @@ generator = pipeline('text-generation', model='gpt2')
 
 # Функція для відповіді
 def generate_response(prompt):
-    response = generator(prompt, max_length=50, num_return_sequences=1)
+    response = generator(prompt, max_length=50, num_return_sequences=1, truncation=True)
     return response[0]['generated_text'].strip()
 
 # Обробники
@@ -30,12 +30,19 @@ async def handle_message(update: Update, context):
 async def main():
     application = Application.builder().token(os.getenv("TELEGRAM_TOKEN")).build()
 
+    # Ініціалізація
+    await application.initialize()
+
+    # Додавання обробників
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    # Запуск
     await application.start()
     await application.updater.start_polling()
 
+    # Тримаємо програму працюючою
+    await application.idle()
+
 if __name__ == '__main__':
-    import asyncio
     asyncio.run(main())
