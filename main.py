@@ -1,49 +1,47 @@
 import os
-import logging
-import asyncio
+import random
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline
 
-# Налаштування логування
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Ініціалізація моделі HuggingFace
+generator = pipeline('text-generation', model='gpt2')
 
-# Ініціалізація моделі Hugging Face
-generator = pipeline('text-generation', model='distilgpt2', token=os.getenv('HF_API_TOKEN'))
-
-# Функція для відповіді
+# Функція для генерації відповіді
 def generate_response(prompt):
-    logger.info(f"Generating response for prompt: {prompt}")
-    response = generator(prompt, max_length=50, num_return_sequences=1, truncation=True)
-    return response[0]['generated_text'].strip()
+    response = generator(prompt, max_length=100, num_return_sequences=1)
+    return response[0]['generated_text']
 
-# Обробники
+# Обробник команди /start
 async def start(update: Update, context):
-    await update.message.reply_text('Привіт! Я AI бот, готовий спілкуватися.')
+    await update.message.reply_text('Привіт! Я Дарина, ваш ШІ-асистент. Як я можу вам допомогти?')
 
+# Обробник повідомлень
 async def handle_message(update: Update, context):
-    message = update.message.text
-    response = generate_response(message)
-    await update.message.reply_text(response)
+    message = update.message
+    text = message.text.lower()
 
-# Головна функція
-async def main():
-    application = Application.builder().token(os.getenv("TELEGRAM_TOKEN")).build()
+    # Перевірка, чи згадано бота
+    if 'дарина' in text or f'@{context.bot.username}' in text:
+        response = generate_response(text)
+        await message.reply_text(response)
+    elif random.random() < 0.1:  # 10% шанс відповісти на випадкове повідомлення
+        response = generate_response(text)
+        await message.reply_text(response)
 
+def main():
+    # Отримання токена з змінної середовища
+    token = os.environ.get('TELEGRAM_TOKEN')
+    
+    # Створення і запуск бота
+    application = Application.builder().token(token).build()
+    
     # Додавання обробників
-    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler('start', start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Налаштування вебхука
-    webhook_url = f"https://{os.getenv('RAILWAY_PROJECT_NAME')}.railway.app/{os.getenv('TELEGRAM_TOKEN')}"
-    logger.info(f"Setting up webhook to {webhook_url}")
-    await application.bot.set_webhook(webhook_url)
-
+    
     # Запуск бота
-    await application.initialize()
-    await application.start_polling()
-    logger.info("Bot started successfully")
+    application.run_polling()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
