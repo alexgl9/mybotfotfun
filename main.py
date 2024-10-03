@@ -4,14 +4,23 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline, set_seed
+from huggingface_hub import login
 
 # Налаштування логування
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Аутентифікація в Hugging Face
+hf_token = os.environ.get('HF_API_TOKEN')
+if hf_token:
+    login(hf_token)
+    logger.info("Успішна аутентифікація в Hugging Face")
+else:
+    logger.warning("HF_API_TOKEN не знайдено. Аутентифікація не виконана.")
+
 # Ініціалізація моделі HuggingFace
 try:
-    generator = pipeline('text-generation', model='Babelscape/wikineural-multilingual-news-pipeline', device=-1)  # використовуємо CPU
+    generator = pipeline('text-generation', model='gpt2', device=-1)  # використовуємо CPU
     set_seed(42)  # для відтворюваності результатів
     logger.info("Модель успішно завантажена")
 except Exception as e:
