@@ -9,7 +9,7 @@ from transformers import pipeline
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Ініціалізація моделі Hugging Face
+# Ініціалізація моделі Hugging Face DistilGPT-2
 try:
     generator = pipeline('text-generation', model='distilgpt2')
     logger.info("Hugging Face DistilGPT-2 model initialized successfully")
@@ -32,7 +32,7 @@ async def start(update: Update, context):
 async def handle_message(update: Update, context):
     message = update.message.text
     chat_id = update.effective_chat.id
-    
+
     # Перевірка, чи згадано бота
     if update.message.chat.type in ['group', 'supergroup']:
         if context.bot.username.lower() in message.lower():
@@ -57,6 +57,7 @@ async def main():
     webhook_url = f"https://{os.getenv('RAILWAY_PROJECT_NAME')}.railway.app/{os.getenv('TELEGRAM_TOKEN')}"
     logger.info(f"Setting up webhook to {webhook_url}")
     
+    # Встановлення вебхука
     await application.bot.set_webhook(webhook_url)
 
     # Запуск
