@@ -1,15 +1,10 @@
-# Вказуємо базовий образ
-FROM python:3.11
+FROM python:3.9-slim
 
-# Встановлюємо робочу директорію
 WORKDIR /app
 
-# Копіюємо файли проекту
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
-# Встановлюємо залежності
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
-
-# Команда для запуску програми
 CMD ["python", "main.py"]
