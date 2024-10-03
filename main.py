@@ -4,19 +4,11 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline, set_seed
-from huggingface_hub import login
+import asyncio
 
 # Налаштування логування
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
-# Аутентифікація в Hugging Face
-hf_token = os.environ.get('HF_API_TOKEN')
-if hf_token:
-    login(hf_token)
-    logger.info("Успішна аутентифікація в Hugging Face")
-else:
-    logger.warning("HF_API_TOKEN не знайдено. Аутентифікація не виконана.")
 
 # Ініціалізація моделі HuggingFace
 try:
@@ -44,23 +36,34 @@ async def start(update: Update, context):
 # Обробник повідомлень
 async def handle_message(update: Update, context):
     message = update.message
+    if message is None or message.text is None:
+        logger.warning("Отримано порожнє повідомлення")
+        return
+
     text = message.text.lower()
+    logger.debug(f"Отримано повідомлення: {text[:50]}...")
 
     try:
         # Перевірка, чи згадано бота
-        if 'дарина' in text or f'@{context.bot.username}' in text:
+        if 'дарина' in text or (context.bot.username and f'@{context.bot.username.lower()}' in text):
+            logger.info("Виявлено згадку бота")
             response = generate_response(text)
+            logger.info(f"Згенерована відповідь: {response[:50]}...")
             await message.reply_text(response)
-            logger.info(f"Відповідь на згадку бота: {text[:20]}...")
-        elif random.random() < 0.1:  # 10% шанс відповісти на випадкове повідомлення
+            logger.info(f"Відповідь надіслано на згадку бота: {text[:20]}...")
+        elif message.chat.type == 'private' or random.random() < 0.1:  # Завжди відповідаємо в особистих повідомленнях або з 10% шансом в групах
+            logger.info("Вибрано для відповіді")
             response = generate_response(text)
+            logger.info(f"Згенерована відповідь: {response[:50]}...")
             await message.reply_text(response)
-            logger.info(f"Випадкова відповідь на: {text[:20]}...")
+            logger.info(f"Відповідь надіслано: {text[:20]}...")
+        else:
+            logger.info("Повідомлення проігноровано")
     except Exception as e:
-        logger.error(f"Помилка при обробці повідомлення: {e}")
+        logger.error(f"Помилка при обробці повідомлення: {e}", exc_info=True)
         await message.reply_text("Вибачте, сталася помилка при обробці вашого повідомлення.")
 
-def main():
+async def main():
     # Отримання токена з змінної середовища
     token = os.environ.get('TELEGRAM_TOKEN')
     if not token:
@@ -77,9 +80,11 @@ def main():
         
         # Запуск бота
         logger.info("Бот запускається...")
-        application.run_polling()
+        await application.initialize()
+        await application.start()
+        await application.run_polling()
     except Exception as e:
-        logger.error(f"Помилка при запуску бота: {e}")
+        logger.error(f"Помилка при запуску бота: {e}", exc_info=True)
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
