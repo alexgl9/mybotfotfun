@@ -9,61 +9,41 @@ from transformers import pipeline
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Отримання токенів з змінних середовища
-HF_API_TOKEN = os.getenv("HF_API_TOKEN")
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-RAILWAY_PROJECT_NAME = os.getenv("RAILWAY_PROJECT_NAME")
+# Ініціалізація моделі Hugging Face
+generator = pipeline('text-generation', model='distilgpt2', token=os.getenv('HF_API_TOKEN'))
 
-# Ініціалізація моделі Hugging Face DistilGPT-2
-try:
-    generator = pipeline('text-generation', model='distilgpt2', use_auth_token=HF_API_TOKEN)
-    logger.info("Hugging Face DistilGPT-2 model initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize Hugging Face model: {str(e)}")
-    generator = None
-
-# Функція для генерації відповіді
+# Функція для відповіді
 def generate_response(prompt):
-    if generator is None:
-        return "Вибачте, я зараз не можу генерувати відповіді."
-    try:
-        response = generator(prompt, max_length=50, num_return_sequences=1, truncation=True)
-        return response[0]['generated_text'].strip()
-    except Exception as e:
-        logger.error(f"Error generating response: {str(e)}")
-        return "Вибачте, сталася помилка при генерації відповіді."
+    logger.info(f"Generating response for prompt: {prompt}")
+    response = generator(prompt, max_length=50, num_return_sequences=1, truncation=True)
+    return response[0]['generated_text'].strip()
 
-# Обробники команд
+# Обробники
 async def start(update: Update, context):
     await update.message.reply_text('Привіт! Я AI бот, готовий спілкуватися.')
 
 async def handle_message(update: Update, context):
     message = update.message.text
-    if message.lower().startswith("як справи?") or "дарина" in message.lower() or update.message.reply_to_message:
-        response = generate_response(message)
-        await update.message.reply_text(response)
-    else:
-        logger.info("Message ignored due to content.")
+    response = generate_response(message)
+    await update.message.reply_text(response)
 
 # Головна функція
 async def main():
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application = Application.builder().token(os.getenv("TELEGRAM_TOKEN")).build()
 
     # Додавання обробників
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Налаштування вебхука
-    webhook_url = f"https://{RAILWAY_PROJECT_NAME}.railway.app/{TELEGRAM_TOKEN}"
+    webhook_url = f"https://{os.getenv('RAILWAY_PROJECT_NAME')}.railway.app/{os.getenv('TELEGRAM_TOKEN')}"
     logger.info(f"Setting up webhook to {webhook_url}")
-
-    # Встановлення вебхука
     await application.bot.set_webhook(webhook_url)
 
-    # Запуск
+    # Запуск бота
     await application.initialize()
-    await application.start()
-    await application.idle()
+    await application.start_polling()
+    logger.info("Bot started successfully")
 
 if __name__ == '__main__':
     asyncio.run(main())
