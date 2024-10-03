@@ -5,55 +5,63 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline
 
-# Логування
+# Налаштування логування
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Ініціалізація моделі Hugging Face
+# Отримання токенів з змінних середовища
+HF_API_TOKEN = os.getenv("HF_API_TOKEN")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+RAILWAY_PROJECT_NAME = os.getenv("RAILWAY_PROJECT_NAME")
+
+# Ініціалізація моделі Hugging Face DistilGPT-2
 try:
-    generator = pipeline('text-generation', model='distilgpt2', token=os.getenv("HF_API_TOKEN"))
+    generator = pipeline('text-generation', model='distilgpt2', use_auth_token=HF_API_TOKEN)
     logger.info("Hugging Face DistilGPT-2 model initialized successfully")
 except Exception as e:
-    logger.error(f"Failed to initialize model: {str(e)}")
+    logger.error(f"Failed to initialize Hugging Face model: {str(e)}")
     generator = None
 
 # Функція для генерації відповіді
 def generate_response(prompt):
     if generator is None:
         return "Вибачте, я зараз не можу генерувати відповіді."
-    response = generator(prompt, max_length=50, num_return_sequences=1, truncation=True)
-    return response[0]['generated_text'].strip()
+    try:
+        response = generator(prompt, max_length=50, num_return_sequences=1, truncation=True)
+        return response[0]['generated_text'].strip()
+    except Exception as e:
+        logger.error(f"Error generating response: {str(e)}")
+        return "Вибачте, сталася помилка при генерації відповіді."
 
-# Обробники
+# Обробники команд
 async def start(update: Update, context):
-    await update.message.reply_text('Привіт! Я AI бот.')
+    await update.message.reply_text('Привіт! Я AI бот, готовий спілкуватися.')
 
 async def handle_message(update: Update, context):
     message = update.message.text
-    chat_id = update.effective_chat.id
-
-    # Перевірка, чи це групове повідомлення або особисте
-    if message.lower().startswith("дарина") or f"@{context.bot.username}" in message:
+    if message.lower().startswith("як справи?") or "дарина" in message.lower() or update.message.reply_to_message:
         response = generate_response(message)
-        await context.bot.send_message(chat_id=chat_id, text=response, reply_to_message_id=update.message.message_id)
+        await update.message.reply_text(response)
+    else:
+        logger.info("Message ignored due to content.")
 
 # Головна функція
 async def main():
-    application = Application.builder().token(os.getenv("TELEGRAM_TOKEN")).build()
-
-    # Ініціалізація
-    await application.initialize()
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
 
     # Додавання обробників
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Запуск вебхука
-    webhook_url = f"https://{os.getenv('RAILWAY_PROJECT_NAME')}.railway.app/{os.getenv('TELEGRAM_TOKEN')}"
+    # Налаштування вебхука
+    webhook_url = f"https://{RAILWAY_PROJECT_NAME}.railway.app/{TELEGRAM_TOKEN}"
     logger.info(f"Setting up webhook to {webhook_url}")
+
+    # Встановлення вебхука
     await application.bot.set_webhook(webhook_url)
 
     # Запуск
+    await application.initialize()
     await application.start()
     await application.idle()
 
