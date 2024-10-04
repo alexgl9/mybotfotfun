@@ -1,7 +1,7 @@
 import os
 import random
 import openai
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from datetime import datetime, timedelta
 
@@ -62,6 +62,29 @@ async def get_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Привіт! Я бот і відповідаю на твої питання.')
 
+# Create inline keyboard for setting the bot's role
+async def set_role_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Токсичний", callback_data='toxic')],
+        [InlineKeyboardButton("Добрий", callback_data='kind')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text('Виберіть характер бота:', reply_markup=reply_markup)
+
+# Handle the button press
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()  # Acknowledge the button press
+
+    global default_role
+
+    if query.data == 'toxic':
+        default_role = "токсичний бот, який любить тролити людей. відповіді завжди з якимось приколом."
+        await query.edit_message_text(text="Характер бота змінено на токсичний.")
+    elif query.data == 'kind':
+        default_role = "добрий бот, який завжди готовий допомогти."
+        await query.edit_message_text(text="Характер бота змінено на добрий.")
+
 # Handle messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global chat_history
@@ -93,19 +116,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response_text = await generate_response(messages)
         await update.message.reply_text(response_text)
 
-    # Випадкове передбачення з відміткою користувача (1,5% шанс)
+    # Randomly react to a message with emoji (15% chance)
     if random.random() < 0.015:
-        chat_members = await get_chat_members(update, context)
-        if chat_members:
-            random_user = random.choice(chat_members)
-
-            # Вибір між статичним передбаченням або передбаченням через ШІ
-            if random.random() < 0.5:
-                prediction = random.choice(static_predictions)  # Статичне передбачення
-            else:
-                prediction = await generate_ai_prediction()  # ШІ передбачення
-
-            await update.message.reply_text(f"{random_user.username}, {prediction}", reply_to_message_id=update.message.message_id)
+        emoji = random.choice(emojis)
+        await update.message.reply_text(emoji, reply_to_message_id=update.message.message_id)
 
 # Handle the /summary command with time argument
 async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -133,14 +147,20 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("В цьому часі немає повідомлень для саммарі.")
 
+# Set a role for the bot
+async def set_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await set_role_buttons(update, context)
+
 def main():
     token = os.getenv('TELEGRAM_TOKEN')
     application = Application.builder().token(token).build()
 
     # Add handlers
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("set", set_role_buttons))  # Changed to set_role_buttons
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CommandHandler("summary", summary))  # Summary command
+    application.add_handler(CallbackQueryHandler(button))  # Handle button presses
 
     # Start the bot
     application.run_polling()
