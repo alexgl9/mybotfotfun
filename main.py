@@ -8,14 +8,18 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Генерація відповіді
 async def generate_response(message: str) -> str:
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",  # Переконайтесь, що ви використовуєте правильну модель
-        messages=[
-            {"role": "user", "content": message}
-        ],
-        max_tokens=100
-    )
-    return response['choices'][0]['message']['content']
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",  # Використовуйте модель, яка доступна для вашого плану
+            messages=[
+                {"role": "user", "content": message}
+            ],
+            max_tokens=100
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        print(f"Error generating response: {str(e)}")
+        return "На жаль, сталася помилка при генерації відповіді."
 
 # Обробник команди /start
 async def start(update: Update, context):
