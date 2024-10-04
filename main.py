@@ -1,16 +1,15 @@
 import os
 import logging
-import requests
-import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from telegram.error import RetryAfter
+import asyncio
 
 # Налаштування логування
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Функція для генерації тексту (без змін)
+# Функція для відповіді
 def generate_response(prompt):
     return "клас"
 
@@ -23,7 +22,7 @@ async def handle_message(update: Update, context):
     response = generate_response(update.message.text)
     await update.message.reply_text(response)
 
-# Налаштування вебхука з обробкою Flood Control
+# Встановлення вебхука з обробкою Flood Control
 async def set_webhook_with_retry(application, webhook_url):
     try:
         await application.bot.set_webhook(webhook_url)
@@ -48,13 +47,13 @@ async def main():
 
     logger.info("Бот запущено")
 
-    # Тримаємо бот у вебхуковому режимі
-    await application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", 8443)),
-        url_path=token,
-        webhook_url=webhook_url,
-    )
+    # Тримаємо бот у вебхуковому режимі без закриття циклу подій
+    await application.start()
+    await application.updater.start_webhook(listen="0.0.0.0", port=int(os.getenv('PORT', 8443)), webhook_url=webhook_url)
+
+    # Підтримуємо програму працюючою
+    await application.updater.idle()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    # Запускаємо головну функцію без asyncio.run
+    asyncio.get_event_loop().run_until_complete(main())
