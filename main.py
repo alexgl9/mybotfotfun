@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 # Ініціалізація моделі Hugging Face
 try:
-    generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M', device=0)  # використовуємо GPU, якщо доступно
+    # Визначаємо доступність GPU
+    generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M')  # Не вказуємо device
     set_seed(42)  # для відтворюваності результатів
     logger.info("Модель успішно завантажена")
 except Exception as e:
