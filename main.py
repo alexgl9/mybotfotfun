@@ -1,80 +1,89 @@
 import os
 import random
 import asyncio
-import openai
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+import openai
 
-# Set your OpenAI API key
+# Ініціалізація OpenAI
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
-# Default role
-default_role = "девчинка Дарина, яка навчалася в ДПІ, любить алкоголь і вечірки."
+# Змінна для ролі
+role = "Дівчинка Дарина, яка навчалася в ДПІ, любить алкоголь і вечірки."
 
-# Generate a response from OpenAI
+# Обробник команди /start
+async def start(update: Update, context):
+    await update.message.reply_text('Привіт! Я бот Дарина, готова відповісти на твої питання!')
+
+# Обробник команди /set
+async def set_role(update: Update, context):
+    global role
+    if context.args:
+        role = ' '.join(context.args)
+        await update.message.reply_text(f'Роль змінено на: {role}')
+    else:
+        await update.message.reply_text('Будь ласка, введіть роль після команди /set.')
+
+# Генерація відповіді з OpenAI
 async def generate_response(message):
     try:
-        response = openai.ChatCompletion.create(
+        response = await openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": f"You are {default_role}."},
-                {"role": "user", "content": message}
-            ]
+            messages=[{"role": "user", "content": message}],
+            max_tokens=100
         )
-        return response['choices'][0]['message']['content']
+        return response.choices[0].message.content.strip()
     except Exception as e:
         print(f"Error generating response: {e}")
-        return "На жаль, сталася помилка при генерації відповіді."
+        return None
 
-# Handle the /start command
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('Привіт! Я бот і відповідаю на твої питання.')
-
-# Handle replies to bot messages
-async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
-        # This is a reply to the bot's message
-        message = update.message.text.lower()
-        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        response_text = await generate_response(message)
-        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
-
-# Handle regular messages
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Обробник повідомлень
+async def handle_message(update: Update, context):
     message = update.message.text.lower()
 
-    # Check if the bot is mentioned by name or username
-    if 'дарина' in message or f"@{context.bot.username.lower()}" in message:
-        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
+    # Перевірка, чи згадано бота за ім'ям або юзернеймом, або якщо це особисте повідомлення
+    if 'дарина' in message or f"@{context.bot.username.lower()}" in message or update.message.chat.type == 'private':
+        await update.message.reply_text('Генерую відповідь...')
+        
+        # Імітація написання
+        await asyncio.sleep(random.uniform(1, 3))  # Імітація затримки
         response_text = await generate_response(message)
-        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
+        
+        if response_text:
+            await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
+        else:
+            await update.message.reply_text('На жаль, сталася помилка при генерації відповіді.')
 
-    # Randomly interject in the chat
-    if random.random() < 0.1:  # 10% chance
-        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        response_text = await generate_response(message)
-        await update.message.reply_text(response_text)
+    # Втручання в розмову з ймовірністю 10%
+    if random.random() < 0.1:
+        await asyncio.sleep(random.uniform(1, 3))  # Імітація затримки
+        random_message = "Це випадкова репліка від Дарини."  # Змінити на будь-який текст
+        await update.message.reply_text(random_message)
 
-# Set a role for the bot
-async def set_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global default_role
-    if context.args:
-        default_role = ' '.join(context.args)
-        await update.message.reply_text(f"Роль змінено на: {default_role}")
-    else:
-        await update.message.reply_text("Будь ласка, надайте нову роль.")
+    # Якщо хтось відповідає реплаєм на повідомлення бота
+    if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
+        instruction_message = update.message.text
+        await update.message.reply_text('Генерую відповідь на ваш запит...')
+        
+        # Імітація написання
+        await asyncio.sleep(random.uniform(1, 3))  # Імітація затримки
+        response_text = await generate_response(instruction_message)
+        
+        if response_text:
+            await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
+        else:
+            await update.message.reply_text('На жаль, сталася помилка при генерації відповіді.')
 
 def main():
     token = os.getenv('TELEGRAM_TOKEN')
     application = Application.builder().token(token).build()
 
-    # Add handlers
+    # Додавання обробників
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("set", set_role))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Reply(), handle_reply))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Start the bot
+    # Запуск бота
     application.run_polling()
 
 if __name__ == '__main__':
