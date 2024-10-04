@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 # Ініціалізація моделі HuggingFace
 try:
-    # Використовуємо DistilGPT-2 для меншого навантаження на хостинг
     generator = pipeline('text-generation', model='distilgpt2', device=-1)  # використовуємо CPU
     set_seed(42)  # для відтворюваності результатів
     logger.info("Модель успішно завантажена")
@@ -20,10 +19,10 @@ except Exception as e:
     logger.error(f"Помилка при завантаженні моделі: {e}")
     raise
 
-# Функція для генерації відповіді з оптимізацією параметрів
+# Функція для генерації відповіді з параметром truncation
 def generate_response(prompt):
     try:
-        response = generator(prompt, max_length=50, num_return_sequences=1, do_sample=True, temperature=0.7, top_p=0.9)
+        response = generator(prompt, max_length=50, num_return_sequences=1, do_sample=True, temperature=0.7, top_p=0.9, truncation=True)
         return response[0]['generated_text'].strip()
     except Exception as e:
         logger.error(f"Помилка при генерації відповіді: {e}")
