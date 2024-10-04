@@ -56,7 +56,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Randomly interject in the chat
-    if random.random() < 0.02:  # 2% chance
+    if random.random() < 0.1:  # 10% chance
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
         response_text = await generate_response(messages)
         await update.message.reply_text(response_text)
@@ -76,8 +76,9 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Filter messages from the specified time window
     recent_messages = [msg['message'] for msg in chat_history if msg['timestamp'] > time_window]
     
+    # If there are no recent messages, do not provide an explanation
     if not recent_messages:
-        await update.message.reply_text(f"Не було повідомлень за останні {hours} годин.")
+        await update.message.reply_text("")  # Send an empty response to avoid additional messages
         return
 
     # Create summary from recent messages
