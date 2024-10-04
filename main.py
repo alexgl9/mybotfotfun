@@ -55,10 +55,12 @@ async def main():
     logger.info("Бот запущено")
 
     # Тримаємо бот у вебхуковому режимі
-    await application.initialize()
-    await application.start()
-    await application.updater.start_webhook(listen="0.0.0.0", port=int(os.getenv('PORT', 8443)))
-    await application.idle()
+    await application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", 8443)),
+        url_path=token,
+        webhook_url=webhook_url,
+    )
 
 if __name__ == '__main__':
     import asyncio
