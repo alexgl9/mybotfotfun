@@ -1,59 +1,96 @@
 import os
 import random
-import asyncio
 import openai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import asyncio
+import json
 
-# Set your OpenAI API key
+# Ініціалізація OpenAI API
 openai.api_key = os.getenv('OPENAI_API_KEY')
+openai_api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI(api_key=openai_api_key)
 
-# Default role
+# Стандартна роль
 default_role = "дівчинка Дарина, яка навчалася в ДПІ, любить алкоголь і вечірки."
+pending_messages = []  # Для зберігання запитів
 
-# Generate a response from OpenAI
-async def generate_response(message):
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": f"You are {default_role}."},
-                {"role": "user", "content": message}
-            ]
-        )
-        return response['choices'][0]['message']['content']
-    except Exception as e:
-        print(f"Error generating response: {e}")
-        return "На жаль, сталася помилка при генерації відповіді."
+# Створення JSONL файлу
+def create_jsonl_file(messages, file_path="batchinput.jsonl"):
+    with open(file_path, 'w') as file:
+        for i, message in enumerate(messages):
+            data = {
+                "custom_id": f"request-{i+1}",
+                "method": "POST",
+                "url": "/v1/chat/completions",
+                "body": {
+                    "model": "gpt-3.5-turbo",
+                    "messages": [
+                        {"role": "system", "content": f"You are {default_role}."},
+                        {"role": "user", "content": message}
+                    ]
+                }
+            }
+            file.write(json.dumps(data) + "\n")
+    return file_path
 
-# Handle the /start command
+# Завантаження файлу з запитами
+def upload_batch_file(file_path):
+    with open(file_path, "rb") as file:
+        batch_input_file = client.files.create(file=file, purpose="batch")
+    return batch_input_file.id
+
+# Створення партії
+def create_batch(batch_file_id):
+    batch = client.batches.create(
+        input_file_id=batch_file_id,
+        endpoint="/v1/chat/completions",
+        completion_window="24h"
+    )
+    return batch
+
+# Перевірка статусу партії
+def check_batch_status(batch_id):
+    batch_status = client.batches.retrieve(batch_id)
+    return batch_status
+
+# Отримання результатів після завершення партії
+def get_batch_results(output_file_id):
+    file_response = client.files.content(output_file_id)
+    return file_response.text
+
+# Асинхронний обробник партій
+async def handle_batch_responses():
+    while True:
+        if len(pending_messages) >= 5:  # Створюємо партію після 5 повідомлень
+            file_path = create_jsonl_file(pending_messages)
+            batch_file_id = upload_batch_file(file_path)
+            batch = create_batch(batch_file_id)
+            await asyncio.sleep(10)  # Чекаємо 10 секунд для обробки партії
+            batch_status = check_batch_status(batch['id'])
+            if batch_status['status'] == 'completed':
+                results = get_batch_results(batch_status['output_file_id'])
+                # Обробка результатів
+        await asyncio.sleep(5)  # Перевіряємо кожні 5 секунд
+
+# Запуск партійного процесу
+asyncio.create_task(handle_batch_responses())
+
+# Обробник команди /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Привіт сучєчькі. Я Дарина і сьогодні я вся ваша.')
 
-# Handle messages
+# Обробник повідомлень
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.lower()
+    chat_id = update.message.chat_id
 
-    # Check if the bot is mentioned by name or username
     if 'дарина' in message or f"@{context.bot.username.lower()}" in message:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        response_text = await generate_response(message)
-        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
+        pending_messages.append(message)
+        await update.message.reply_text("Ваш запит буде оброблено незабаром!", reply_to_message_id=update.message.message_id)
 
-    # Check if it's a reply to the bot's message
-    if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
-        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        response_text = await generate_response(message)
-        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
-        return
-
-    # Randomly interject in the chat
-    if random.random() < 0.1:  # 10% chance
-        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        response_text = await generate_response(message)
-        await update.message.reply_text(response_text)
-
-# Set a role for the bot
+# Задання ролі для бота
 async def set_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global default_role
     if context.args:
@@ -66,12 +103,12 @@ def main():
     token = os.getenv('TELEGRAM_TOKEN')
     application = Application.builder().token(token).build()
 
-    # Add handlers
+    # Додаємо обробники
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("set", set_role))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Start the bot
+    # Запуск бота
     application.run_polling()
 
 if __name__ == '__main__':
