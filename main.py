@@ -1,36 +1,47 @@
 import os
-import random
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline, set_seed
 
 # Налаштування логування
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Ініціалізація моделі Hugging Face
-generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M')
-set_seed(42)  # Для відтворюваності
+try:
+    generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M', device=-1)  # Використовуємо CPU
+    set_seed(42)  # Для відтворюваності результатів
+    logger.info("Модель успішно завантажена")
+except Exception as e:
+    logger.error(f"Помилка при завантаженні моделі: {e}")
+    raise
 
 # Обробник команди /start
 async def start(update: Update, context):
-    await update.message.reply_text('Привіт! Я бот, який генерує відповіді на ваші запити.')
-
-# Функція для генерації відповіді
-def generate_response(prompt):
-    response = generator(prompt, max_length=50, num_return_sequences=1, do_sample=True)
-    return response[0]['generated_text'].strip()
+    await update.message.reply_text('Привіт! Я бот і відповідаю на згадки.')
 
 # Обробник повідомлень
 async def handle_message(update: Update, context):
     message = update.message.text.lower()
 
-    # Перевірка, чи згадано бота за ім'ям або юзернеймом, або якщо це особисте повідомлення
-    if 'дарина' in message or f"@{context.bot.username.lower()}" in message or update.message.chat.type == 'private':
-        # Генеруємо відповідь
-        generated_response = generate_response(message)
-        await update.message.reply_text(generated_response, reply_to_message_id=update.message.message_id)
+    # Перевірка, чи згадано бота
+    if 'дарина' in message or f"@{context.bot.username.lower()}" in message:
+        logger.info("Згадка бота виявлена.")
+        response = generate_response(message)
+        await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
+    elif update.message.chat.type == 'private':
+        logger.info("Отримано особисте повідомлення.")
+        response = generate_response(message)
+        await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
+
+def generate_response(prompt):
+    try:
+        response = generator(prompt, max_length=50, num_return_sequences=1, truncation=True)
+        return response[0]['generated_text'].strip()
+    except Exception as e:
+        logger.error(f"Помилка при генерації відповіді: {e}")
+        return "Вибачте, не можу згенерувати відповідь."
 
 def main():
     token = os.getenv('TELEGRAM_TOKEN')
