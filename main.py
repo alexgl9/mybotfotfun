@@ -118,6 +118,6 @@ async def main():
     # Запуск бота
     await application.run_polling()
 
-# Перевірка на наявність існуючого циклу подій
+# Використовуємо існуючий цикл подій
 if __name__ == '__main__':
     asyncio.run(main())  # Використовуємо asyncio.run() для запуску main()
