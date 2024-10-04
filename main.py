@@ -71,9 +71,6 @@ async def handle_batch_responses():
                 print("Batch Results: ", results)  # Можна вивести результати або використати їх далі
         await asyncio.sleep(5)  # Перевіряємо кожні 5 секунд
 
-# Запуск процесу обробки партій
-asyncio.create_task(handle_batch_responses())
-
 # Обробник команди /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Привіт! Я Дарина і сьогодні я вся ваша.')
@@ -81,7 +78,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Обробник повідомлень
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.lower()
-    chat_id = update.message.chat_id
 
     # Якщо бот згадується по імені або username
     if 'дарина' in message or f"@{context.bot.username.lower()}" in message:
@@ -99,7 +95,7 @@ async def set_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Будь ласка, надайте нову роль.")
 
 # Основна функція для запуску бота
-def main():
+async def main():
     token = os.getenv('TELEGRAM_TOKEN')
     application = Application.builder().token(token).build()
 
@@ -108,8 +104,11 @@ def main():
     application.add_handler(CommandHandler("set", set_role))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    # Створюємо задачу для обробки batch відповідей
+    asyncio.create_task(handle_batch_responses())
+
     # Запуск бота
-    application.run_polling()
+    await application.run_polling()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
