@@ -29,7 +29,7 @@ async def generate_response(message_text):
         return response['choices'][0]['message']['content']
     except Exception as e:
         logger.error(f"Помилка при генерації відповіді: {e}")  # Логування помилки
-        return f"Сталася помилка при генерації відповіді: {e}"
+        return "Сталася помилка при генерації відповіді."
 
 # Обробник повідомлень
 async def handle_message(update: Update, context):
