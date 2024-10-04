@@ -1,7 +1,7 @@
 import os
 import random
 import asyncio
-import openai  # Коректний імпорт OpenAI
+import openai
 import json
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -80,7 +80,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.lower()
 
     # Якщо бот згадується по імені або username
-    if 'дарина' in message or f"@{context.bot.username.lower()}" in message:
+    if 'дарина' в message або f"@{context.bot.username.lower()}" в message:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
         pending_messages.append(message)
         await update.message.reply_text("Ваш запит буде оброблено незабаром!", reply_to_message_id=update.message.message_id)
@@ -110,5 +110,13 @@ async def main():
     # Запуск бота
     await application.run_polling()
 
+# Перевірка на наявність існуючого циклу подій
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
+    except RuntimeError as e:
+        if str(e) == "This event loop is already running":
+            print("Цикл подій вже працює, продовжуємо...")
+        else:
+            raise
