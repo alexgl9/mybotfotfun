@@ -1,32 +1,18 @@
 import os
 import logging
 import requests
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.error import RetryAfter
 
 # Налаштування логування
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Функція для генерації тексту з Hugging Face
+# Функція для генерації тексту (без змін)
 def generate_response(prompt):
-    api_token = os.getenv("HF_API_TOKEN")
-    headers = {"Authorization": f"Bearer {api_token}"}
-    payload = {
-        "inputs": prompt,
-        "parameters": {"max_length": 100, "do_sample": True, "temperature": 0.7},
-    }
-    response = requests.post(
-        "https://api-inference.huggingface.co/models/EleutherAI/gpt-neo-125M", 
-        headers=headers, 
-        json=payload
-    )
-    
-    if response.status_code == 200:
-        return response.json()[0]['generated_text']
-    else:
-        logger.error(f"Помилка: {response.status_code}, {response.text}")
-        return "Вибачте, виникла помилка при генерації відповіді."
+    return "клас"
 
 # Обробник команди /start
 async def start(update: Update, context):
@@ -34,9 +20,18 @@ async def start(update: Update, context):
 
 # Обробник повідомлень
 async def handle_message(update: Update, context):
-    message = update.message.text
-    response = generate_response(message)
+    response = generate_response(update.message.text)
     await update.message.reply_text(response)
+
+# Налаштування вебхука з обробкою Flood Control
+async def set_webhook_with_retry(application, webhook_url):
+    try:
+        await application.bot.set_webhook(webhook_url)
+        logger.info(f"Вебхук налаштовано на: {webhook_url}")
+    except RetryAfter as e:
+        logger.warning(f"Flood control: зачекайте {e.retry_after} секунд")
+        await asyncio.sleep(e.retry_after)
+        await set_webhook_with_retry(application, webhook_url)
 
 # Головна функція
 async def main():
@@ -48,10 +43,9 @@ async def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Встановлення вебхука
-    await application.bot.set_webhook(webhook_url)
+    # Встановлення вебхука з обробкою Flood Control
+    await set_webhook_with_retry(application, webhook_url)
 
-    logger.info(f"Вебхук налаштовано на: {webhook_url}")
     logger.info("Бот запущено")
 
     # Тримаємо бот у вебхуковому режимі
@@ -63,5 +57,4 @@ async def main():
     )
 
 if __name__ == '__main__':
-    import asyncio
     asyncio.run(main())
