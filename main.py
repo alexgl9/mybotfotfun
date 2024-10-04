@@ -28,7 +28,7 @@ async def generate_response(message):
 
 # Handle the /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('Привіт! Я бот і відповідаю на твої питання.')
+    await update.message.reply_text('Привіт сучєчькі. Я Дарина і сьогодні я вся ваша.')
 
 # Handle messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
