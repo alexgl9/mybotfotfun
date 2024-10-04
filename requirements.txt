@@ -1,4 +1,2 @@
-python-telegram-bot
-transformers
-torch
-huggingface_hub
+python-telegram-bot[webhooks]
+requests
