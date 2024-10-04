@@ -13,8 +13,10 @@ async def start(update: Update, context):
 # Генерація відповіді за допомогою OpenAI
 async def generate_response(message_text):
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": message_text}],
+        model="gpt-3.5-turbo",  # Використовуємо модель ChatGPT
+        messages=[
+            {"role": "user", "content": message_text}
+        ],
         max_tokens=50
     )
     return response['choices'][0]['message']['content']
