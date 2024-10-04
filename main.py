@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Default role
-default_role = "девчинка Дарина, яка навчалася в ДПІ, любить алкоголь і вечірки."
+default_role = "дівчинка Дарина, яка навчалася в ДПІ, любить алкоголь і вечірки."
 
 # Generate a response from OpenAI
 async def generate_response(message):
@@ -51,7 +51,7 @@ async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
         response_text = await generate_response(update.message.text)
-        await update.message.reply_text(response_text)
+        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
 
 # Set a role for the bot
 async def set_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -70,7 +70,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("set", set_role))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(MessageHandler(filters.TEXT, handle_reply))  # Only check for replies here
+    application.add_handler(MessageHandler(filters.TEXT, handle_reply))  # Check for replies to the bot's messages
 
     # Start the bot
     application.run_polling()
