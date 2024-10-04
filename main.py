@@ -80,7 +80,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.lower()
 
     # Якщо бот згадується по імені або username
-    if 'дарина' в message або f"@{context.bot.username.lower()}" в message:
+    if 'дарина' in message or f"@{context.bot.username.lower()}" in message:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
         pending_messages.append(message)
         await update.message.reply_text("Ваш запит буде оброблено незабаром!", reply_to_message_id=update.message.message_id)
