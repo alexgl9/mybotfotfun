@@ -69,6 +69,7 @@ async def handle_batch_responses():
             if batch_status['status'] == 'completed':
                 results = get_batch_results(batch_status['output_file_id'])
                 print("Batch Results: ", results)  # Можна вивести результати або використати їх далі
+                pending_messages.clear()  # Очищення списку після обробки
         await asyncio.sleep(5)  # Перевіряємо кожні 5 секунд
 
 # Обробник команди /start
@@ -81,6 +82,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Якщо бот згадується по імені або username
     if 'дарина' in message or f"@{context.bot.username.lower()}" in message:
+        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
+        pending_messages.append(message)
+        await update.message.reply_text("Ваш запит буде оброблено незабаром!", reply_to_message_id=update.message.message_id)
+
+    # Якщо є відповідь на повідомлення бота
+    if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
         pending_messages.append(message)
         await update.message.reply_text("Ваш запит буде оброблено незабаром!", reply_to_message_id=update.message.message_id)
