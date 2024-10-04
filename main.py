@@ -1,9 +1,14 @@
 import os
+import logging
 import openai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
-# Налаштування OpenAI
+# Налаштування логування
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# Налаштування OpenAI API
 openai.api_key = os.getenv('OPENAI_API_KEY')  # Ваш OpenAI API ключ
 
 # Обробник команди /start
@@ -13,7 +18,7 @@ async def start(update: Update, context):
 # Генерація відповіді за допомогою OpenAI
 async def generate_response(message_text):
     try:
-        response = openai.ChatCompletion.create(
+        response = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",  # Використовуємо модель ChatGPT
             messages=[
                 {"role": "user", "content": message_text}
@@ -22,6 +27,7 @@ async def generate_response(message_text):
         )
         return response['choices'][0]['message']['content']
     except Exception as e:
+        logger.error(f"Помилка при генерації відповіді: {e}")  # Логування помилки
         return f"Сталася помилка при генерації відповіді: {e}"
 
 # Обробник повідомлень
