@@ -1,6 +1,5 @@
 import os
 import logging
-import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
@@ -31,8 +30,10 @@ async def main():
     
     # Запускаємо бота
     await application.initialize()  # Додати ініціалізацію
-    await application.start_polling()  # Використовуємо polling замість вебхука
     logger.info("Бот запущено на polling")
+    
+    # Запуск бота
+    await application.run_polling()
 
 if __name__ == '__main__':
     asyncio.run(main())
