@@ -79,17 +79,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Обробник повідомлень
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.lower()
+    
+    # Додаємо повідомлення до списку
+    pending_messages.append(message)
 
     # Якщо бот згадується по імені або username
     if 'дарина' in message or f"@{context.bot.username.lower()}" in message:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        pending_messages.append(message)
         await update.message.reply_text("Ваш запит буде оброблено незабаром!", reply_to_message_id=update.message.message_id)
 
     # Якщо є відповідь на повідомлення бота
     if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        pending_messages.append(message)
         await update.message.reply_text("Ваш запит буде оброблено незабаром!", reply_to_message_id=update.message.message_id)
 
 # Зміна ролі бота через команду /set
@@ -111,7 +112,7 @@ async def main():
     application.add_handler(CommandHandler("set", set_role))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Створюємо задачу для обробки batch відповідей
+    # Запускаємо задачу для обробки batch відповідей
     asyncio.create_task(handle_batch_responses())
 
     # Запуск бота
@@ -120,8 +121,7 @@ async def main():
 # Перевірка на наявність існуючого циклу подій
 if __name__ == '__main__':
     try:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(main())
+        asyncio.run(main())
     except RuntimeError as e:
         if str(e) == "This event loop is already running":
             print("Цикл подій вже працює, продовжуємо...")
