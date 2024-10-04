@@ -9,7 +9,7 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 # Генерація відповіді
 async def generate_response(message: str) -> str:
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
+        model="gpt-3.5-turbo",  # Переконайтесь, що ви використовуєте правильну модель
         messages=[
             {"role": "user", "content": message}
         ],
