@@ -18,8 +18,9 @@ async def start(update: Update, context):
 # Генерація відповіді за допомогою OpenAI
 async def generate_response(message_text):
     try:
-        response = await openai.ChatCompletion.acreate(
-            model="gpt-3.5-turbo",  # Використовуємо модель ChatGPT
+        # Використання нового способу доступу до ChatCompletion
+        response = await openai.Chat.completions.create(
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "user", "content": message_text}
             ],
