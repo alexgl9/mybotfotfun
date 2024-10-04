@@ -4,7 +4,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
-# Логування
+# Налаштування логування
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ async def main():
         logger.error("TELEGRAM_TOKEN не знайдено в змінних середовища")
         return
 
-    # Створення і запуск бота
+    # Ініціалізація об'єкта Application
     application = Application.builder().token(token).build()
     
     # Додаємо обробники
@@ -41,6 +41,7 @@ async def main():
     await setup_webhook(application)
 
     # Запускаємо бота
+    await application.initialize()  # додати ініціалізацію
     await application.start()
     await application.idle()
 
