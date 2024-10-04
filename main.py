@@ -40,14 +40,24 @@ async def handle_message(update: Update, context):
 
 # Головна функція
 async def main():
-    application = Application.builder().token(os.getenv("TELEGRAM_TOKEN")).build()
+    token = os.getenv("TELEGRAM_TOKEN")
+    webhook_url = f"https://mybotfotfun-production.up.railway.app/{token}"
+    
+    application = Application.builder().token(token).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    # Встановлення вебхука
+    await application.bot.set_webhook(webhook_url)
+
+    logger.info(f"Вебхук налаштовано на: {webhook_url}")
     logger.info("Бот запущено")
+
+    # Тримаємо бот у вебхуковому режимі
+    await application.initialize()
     await application.start()
-    await application.updater.start_polling()
+    await application.updater.start_webhook(listen="0.0.0.0", port=int(os.getenv('PORT', 8443)))
     await application.idle()
 
 if __name__ == '__main__':
