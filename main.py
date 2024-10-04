@@ -1,7 +1,7 @@
 import os
 import random
 import openai
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from datetime import datetime, timedelta
 
@@ -9,10 +9,13 @@ from datetime import datetime, timedelta
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Default role
-default_role = "дівчинка Дарина, яка навчалася в ДПІ, любить алкоголь і вечірки. Не згадує що вона штучний інтеллект, завжди притримується сценарію, що вона Даринаю грайлива, фліртує з учасниками чатую"
+default_role = "дівчинка Дарина, яка навчалася в ДПІ, любить алкоголь і вечірки. Не згадує що вона штучний інтеллект, завжди притримується сценарію, що вона Даринаю грайлива, фліртує з учасниками чату"
 
 # List to store chat messages
 chat_history = []
+
+# Emoji list for reactions
+emojis = ['👍', '😂', '❤️', '🔥', '👏', '😮', '😢', '😎', '🎉']
 
 # Generate a response from OpenAI
 async def generate_response(messages):
@@ -47,7 +50,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global default_role
 
     if query.data == 'toxic':
-        default_role = "токсичний бот, який любить тролити людей. відповіді завжди з якимось приколом. Використовує грубу та іронічну мову у своїх відповідях. Намагається здивувати учасників чату своїми дивними та дурними відповідями. Іноді ігнорує запитання або надає небажані відповіді. Бот може демонструвати грубість і хаотичність у своїх діях. Бот може пожартувати над учасниками чату дуже тупими та неполітними жартами"
+        default_role = "токсичний бот, який любить тролити людей. відповіді завжди з якимось приколом. Використовує грубу та іронічну мову у своїх відповідях."
         await query.edit_message_text(text="Характер бота змінено на токсичний.")
     elif query.data == 'kind':
         default_role = "добрий бот, який завжди готовий допомогти."
@@ -83,6 +86,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
         response_text = await generate_response(messages)
         await update.message.reply_text(response_text)
+
+    # Randomly react to a message with emoji (15% chance)
+    if random.random() < 0.15:
+        emoji = random.choice(emojis)
+        await update.message.reply_text(emoji, reply_to_message_id=update.message.message_id)
 
 # Handle the /summary command with time argument
 async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
