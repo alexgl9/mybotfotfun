@@ -9,9 +9,9 @@ from datetime import datetime, timedelta
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Default role
-default_role = "агресивна дівчинка Дарина, яка навчалася в ДПІ, любить алкоголь і вечірки. любить жартувати над людьми і підколювати їх"
+default_role = "дівчинка Дарина, яка навчалася в ДПІ, любить алкоголь і вечірки."
 
-# List to store chat messages
+# List to store chat messages and their timestamps
 chat_history = []
 
 # Generate a response from OpenAI
@@ -103,6 +103,13 @@ async def set_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Будь ласка, надайте нову роль.")
 
+# Remove old messages from chat_history
+def cleanup_chat_history():
+    global chat_history
+    now = datetime.now()
+    # Remove messages older than 24 hours
+    chat_history = [(timestamp, msg) for timestamp, msg in chat_history if now - timestamp < timedelta(days=1)]
+
 def main():
     token = os.getenv('TELEGRAM_TOKEN')
     application = Application.builder().token(token).build()
@@ -115,6 +122,9 @@ def main():
 
     # Start the bot
     application.run_polling()
+
+    # Clean up the chat history every 24 hours
+    cleanup_chat_history()
 
 if __name__ == '__main__':
     main()
