@@ -57,14 +57,23 @@ async def generate_response(message, custom_id):
             if batch_status.status == "completed":
                 break
             elif batch_status.status == "failed":
+                print(f"Batch failed: {batch_status}")
                 return "На жаль, пакет не вдався."
             await asyncio.sleep(1)
 
         # Отримання результатів
         output_file_id = batch_status.output_file_id
-        output = openai.File.content(output_file_id)
+        output = openai.File.content(output_file_id).decode('utf-8').strip()
+        
         # Повернення відповіді
-        return output
+        response_lines = output.splitlines()
+        for line in response_lines:
+            if line:
+                response_data = eval(line)  # або використовуйте json.loads(line)
+                if 'response' in response_data:
+                    return response_data['response']['body']['choices'][0]['message']['content']
+                
+        return "Не вдалося отримати відповідь."
     except Exception as e:
         print(f"Error generating response: {e}")
         return "На жаль, сталася помилка при генерації відповіді."
