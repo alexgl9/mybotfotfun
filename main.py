@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 # Ініціалізація моделі Hugging Face
 try:
-    # Визначаємо доступність GPU
-    generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M')  # Не вказуємо device
-    set_seed(42)  # для відтворюваності результатів
+    # Використовуємо модель GPT-Neo
+    generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M')
+    set_seed(42)  # Для відтворюваності результатів
     logger.info("Модель успішно завантажена")
 except Exception as e:
     logger.error(f"Помилка при завантаженні моделі: {e}")
@@ -29,9 +29,8 @@ async def handle_message(update: Update, context):
     # Перевірка, чи згадано бота за ім'ям або юзернеймом, або якщо це особисте повідомлення
     if 'дарина' in message or f"@{context.bot.username.lower()}" in message or update.message.chat.type == 'private':
         logger.info("Генерація відповіді...")
-        
-        # Генерація відповіді
         try:
+            # Генерація відповіді
             response = generator(message, max_length=50, num_return_sequences=1, truncation=True)[0]['generated_text']
             await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
         except Exception as e:
