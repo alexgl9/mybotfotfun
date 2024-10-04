@@ -11,7 +11,7 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 # Default role
 default_role = "дівчинка Дарина, яка навчалася в ДПІ, любить алкоголь і вечірки."
 
-# List to store chat messages and their timestamps
+# List to store chat messages
 chat_history = []
 
 # Generate a response from OpenAI
@@ -36,34 +36,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.lower()
 
     # Save the message to chat history with a timestamp
-    chat_history.append((datetime.now(), update.message.text))
+    chat_history.append({"timestamp": datetime.now(), "message": message})
+
+    # Prepare the messages for the API call
+    messages = [{"role": "system", "content": f"You are {default_role}."}]
+    messages += [{"role": "user", "content": msg['message']} for msg in chat_history]
 
     # Check if the bot is mentioned by name or username
     if 'дарина' in message or f"@{context.bot.username.lower()}" in message:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        response_text = await generate_response([
-            {"role": "system", "content": f"You are {default_role}."},
-            {"role": "user", "content": message}
-        ])
+        response_text = await generate_response(messages)
         await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
 
     # Check if it's a reply to the bot's message
     if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        response_text = await generate_response([
-            {"role": "system", "content": f"You are {default_role}."},
-            {"role": "user", "content": message}
-        ])
+        response_text = await generate_response(messages)
         await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
         return
 
     # Randomly interject in the chat
     if random.random() < 0.1:  # 10% chance
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        response_text = await generate_response([
-            {"role": "system", "content": f"You are {default_role}."},
-            {"role": "user", "content": message}
-        ])
+        response_text = await generate_response(messages)
         await update.message.reply_text(response_text)
 
 # Handle the /summary command with time argument
@@ -79,7 +74,7 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     time_window = datetime.now() - timedelta(hours=hours)
     
     # Filter messages from the specified time window
-    recent_messages = [msg for timestamp, msg in chat_history if timestamp > time_window]
+    recent_messages = [msg['message'] for msg in chat_history if msg['timestamp'] > time_window]
     
     if not recent_messages:
         await update.message.reply_text(f"Не було повідомлень за останні {hours} годин.")
@@ -103,13 +98,6 @@ async def set_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Будь ласка, надайте нову роль.")
 
-# Remove old messages from chat_history
-def cleanup_chat_history():
-    global chat_history
-    now = datetime.now()
-    # Remove messages older than 24 hours
-    chat_history = [(timestamp, msg) for timestamp, msg in chat_history if now - timestamp < timedelta(days=1)]
-
 def main():
     token = os.getenv('TELEGRAM_TOKEN')
     application = Application.builder().token(token).build()
@@ -122,9 +110,6 @@ def main():
 
     # Start the bot
     application.run_polling()
-
-    # Clean up the chat history every 24 hours
-    cleanup_chat_history()
 
 if __name__ == '__main__':
     main()
