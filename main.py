@@ -120,10 +120,4 @@ async def main():
 
 # Перевірка на наявність існуючого циклу подій
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except RuntimeError as e:
-        if str(e) == "This event loop is already running":
-            print("Цикл подій вже працює, продовжуємо...")
-        else:
-            raise
+    main()  # Запускаємо без asyncio.run()
