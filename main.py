@@ -39,6 +39,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response_text = await generate_response(message)
         await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
 
+    # Check if it's a reply to the bot's message
+    if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
+        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
+        response_text = await generate_response(message)
+        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
+        return
+
     # Randomly interject in the chat
     if random.random() < 0.1:  # 10% chance
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
