@@ -1,5 +1,4 @@
 import os
-import asyncio
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
@@ -16,7 +15,7 @@ async def handle_message(update: Update, context):
     await update.message.reply_text('клас')
 
 async def setup_webhook(application):
-    # Формуємо URL для вебхука без порту
+    # Формуємо URL для вебхука
     webhook_url = f"https://{os.getenv('RAILWAY_STATIC_URL')}/{os.getenv('TELEGRAM_TOKEN')}"
     logger.info(f"Налаштовуємо вебхук на: {webhook_url}")
     
@@ -41,9 +40,9 @@ async def main():
     await setup_webhook(application)
 
     # Запускаємо бота
-    await application.initialize()  # додати ініціалізацію
-    await application.start()
-    await application.idle()
+    await application.initialize()  # Додати ініціалізацію
+    await application.start_webhook(listen='0.0.0.0', port=int(os.getenv('PORT', 8443)))
+    logger.info("Бот запущено на вебхуку")
 
 if __name__ == '__main__':
     asyncio.run(main())
