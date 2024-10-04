@@ -98,5 +98,6 @@ async def main():
     # Запуск бота
     await application.run_polling()
 
+# Запуск програми без asyncio.run
 if __name__ == '__main__':
     asyncio.run(main())
