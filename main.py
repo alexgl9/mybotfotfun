@@ -30,7 +30,16 @@ async def generate_response(message):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Привіт! Я бот і відповідаю на твої питання.')
 
-# Handle messages
+# Handle replies to bot messages
+async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
+        # This is a reply to the bot's message
+        message = update.message.text.lower()
+        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
+        response_text = await generate_response(message)
+        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
+
+# Handle regular messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.lower()
 
@@ -62,6 +71,7 @@ def main():
     # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("set", set_role))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Reply(), handle_reply))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Start the bot
