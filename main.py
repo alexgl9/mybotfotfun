@@ -1,7 +1,12 @@
 import os
+import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 import openai
+
+# Налаштування логування
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Ініціалізація OpenAI API
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -18,7 +23,7 @@ async def generate_response(message: str) -> str:
         )
         return response['choices'][0]['message']['content']
     except Exception as e:
-        print(f"Error generating response: {str(e)}")
+        logger.error(f"Error generating response: {str(e)}")  # Логування помилки
         return "На жаль, сталася помилка при генерації відповіді."
 
 # Обробник команди /start
