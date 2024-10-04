@@ -18,7 +18,7 @@ chat_history = []
 async def generate_response(messages):
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="gpt-3.5-turbo",  # Змінено на gpt-3.5
             messages=messages
         )
         return response['choices'][0]['message']['content']
@@ -56,7 +56,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Randomly interject in the chat
-    if random.random() < 0.1:  # 10% chance
+    if random.random() < 0.02:  # 2% chance
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
         response_text = await generate_response(messages)
         await update.message.reply_text(response_text)
