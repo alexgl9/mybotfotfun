@@ -1,6 +1,6 @@
 import os
 import logging
-import asyncio  # Додано імпорт модуля asyncio
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
@@ -14,14 +14,6 @@ async def start(update: Update, context):
 
 async def handle_message(update: Update, context):
     await update.message.reply_text('клас')
-
-async def setup_webhook(application):
-    # Формуємо URL для вебхука
-    webhook_url = f"https://{os.getenv('RAILWAY_STATIC_URL')}/{os.getenv('TELEGRAM_TOKEN')}"
-    logger.info(f"Налаштовуємо вебхук на: {webhook_url}")
-    
-    # Налаштовуємо вебхук
-    await application.bot.set_webhook(webhook_url)
 
 async def main():
     # Отримання токена з змінної середовища
@@ -37,13 +29,10 @@ async def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Налаштовуємо вебхук
-    await setup_webhook(application)
-
     # Запускаємо бота
     await application.initialize()  # Додати ініціалізацію
-    await application.start_webhook(listen='0.0.0.0', port=int(os.getenv('PORT', 8443)))
-    logger.info("Бот запущено на вебхуку")
+    await application.start_polling()  # Використовуємо polling замість вебхука
+    logger.info("Бот запущено на polling")
 
 if __name__ == '__main__':
     asyncio.run(main())
