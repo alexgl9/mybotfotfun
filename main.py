@@ -120,4 +120,4 @@ async def main():
 
 # Перевірка на наявність існуючого циклу подій
 if __name__ == '__main__':
-    main()  # Запускаємо без asyncio.run()
+    asyncio.run(main())  # Використовуємо asyncio.run() для запуску main()
