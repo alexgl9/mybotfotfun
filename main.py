@@ -76,19 +76,16 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Filter messages from the specified time window
     recent_messages = [msg['message'] for msg in chat_history if msg['timestamp'] > time_window]
     
-    # If there are no recent messages, do not provide an explanation
-    if not recent_messages:
-        await update.message.reply_text("")  # Send an empty response to avoid additional messages
-        return
-
     # Create summary from recent messages
-    summary_text = "\n".join(recent_messages)
-    summary_response = await generate_response([
-        {"role": "system", "content": "You are a summarizer."},
-        {"role": "user", "content": f"Ось повідомлення за останні {hours} години:\n{summary_text}\nНапиши коротке самарі."}
-    ])
-
-    await update.message.reply_text(summary_response)
+    if recent_messages:
+        summary_text = "\n".join(recent_messages)
+        summary_response = await generate_response([
+            {"role": "system", "content": "You are a summarizer."},
+            {"role": "user", "content": f"Ось повідомлення за останні {hours} години:\n{summary_text}\nНапиши коротке самарі."}
+        ])
+        await update.message.reply_text(summary_response)
+    else:
+        await update.message.reply_text("В цьому часі немає повідомлень для саммарі.")
 
 # Set a role for the bot
 async def set_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
