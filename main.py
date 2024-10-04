@@ -82,13 +82,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Randomly interject in the chat
-    if random.random() < 0.1:  # 10% chance
+    if random.random() < 0.01:  # 10% chance
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
         response_text = await generate_response(messages)
         await update.message.reply_text(response_text)
 
     # Randomly react to a message with emoji (15% chance)
-    if random.random() < 0.15:
+    if random.random() < 0.015:
         emoji = random.choice(emojis)
         await update.message.reply_text(emoji, reply_to_message_id=update.message.message_id)
 
