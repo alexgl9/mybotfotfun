@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 # Ініціалізація моделі Hugging Face
 try:
-    # Використовуємо модель GPT-Neo
     generator = pipeline('text-generation', model='EleutherAI/gpt-neo-125M')
     set_seed(42)  # Для відтворюваності результатів
     logger.info("Модель успішно завантажена")
@@ -20,7 +19,7 @@ except Exception as e:
 
 # Обробник команди /start
 async def start(update: Update, context):
-    await update.message.reply_text('Привіт! Я бот і можу відповідати на твої повідомлення за допомогою ШІ.')
+    await update.message.reply_text('Привіт! Я бот, і можу відповідати на твої повідомлення.')
 
 # Обробник повідомлень
 async def handle_message(update: Update, context):
@@ -29,10 +28,12 @@ async def handle_message(update: Update, context):
     # Перевірка, чи згадано бота за ім'ям або юзернеймом, або якщо це особисте повідомлення
     if 'дарина' in message or f"@{context.bot.username.lower()}" in message or update.message.chat.type == 'private':
         logger.info("Генерація відповіді...")
+
         try:
-            # Генерація відповіді
+            # Генерація відповіді за допомогою AI
             response = generator(message, max_length=50, num_return_sequences=1, truncation=True)[0]['generated_text']
             await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
+            logger.info(f"Відповідь надіслано: {response}")
         except Exception as e:
             logger.error(f"Помилка при генерації відповіді: {e}")
             await update.message.reply_text("Вибачте, я не зміг згенерувати відповідь.")
