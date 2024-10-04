@@ -46,6 +46,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response_text = await generate_response(message)
         await update.message.reply_text(response_text)
 
+# Handle replies to the bot's messages
+async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
+        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
+        response_text = await generate_response(update.message.text)
+        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
+
 # Set a role for the bot
 async def set_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global default_role
@@ -63,6 +70,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("set", set_role))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & filters.Reply(), handle_reply))
 
     # Start the bot
     application.run_polling()
