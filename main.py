@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Налаштування OpenAI
-openai.api_key = os.getenv('OPENAI_API_KEY')  # Твій OpenAI API ключ
+openai.api_key = os.getenv('OPENAI_API_KEY')  # Ваш OpenAI API ключ
 
 # Обробник команди /start
 async def start(update: Update, context):
@@ -12,14 +12,17 @@ async def start(update: Update, context):
 
 # Генерація відповіді за допомогою OpenAI
 async def generate_response(message_text):
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",  # Використовуємо модель ChatGPT
-        messages=[
-            {"role": "user", "content": message_text}
-        ],
-        max_tokens=50
-    )
-    return response['choices'][0]['message']['content']
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",  # Використовуємо модель ChatGPT
+            messages=[
+                {"role": "user", "content": message_text}
+            ],
+            max_tokens=50
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        return f"Сталася помилка при генерації відповіді: {e}"
 
 # Обробник повідомлень
 async def handle_message(update: Update, context):
