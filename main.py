@@ -1,6 +1,7 @@
 import os
 import random
 import logging
+import time
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from transformers import pipeline, set_seed
@@ -11,18 +12,19 @@ logger = logging.getLogger(__name__)
 
 # Ініціалізація моделі HuggingFace
 try:
-    generator = pipeline('text-generation', model='gpt2', device=-1)  # використовуємо CPU
+    # Використовуємо DistilGPT-2 для меншого навантаження на хостинг
+    generator = pipeline('text-generation', model='distilgpt2', device=-1)  # використовуємо CPU
     set_seed(42)  # для відтворюваності результатів
     logger.info("Модель успішно завантажена")
 except Exception as e:
     logger.error(f"Помилка при завантаженні моделі: {e}")
     raise
 
-# Функція для генерації відповіді
+# Функція для генерації відповіді з оптимізацією параметрів
 def generate_response(prompt):
     try:
-        response = generator(prompt, max_length=100, num_return_sequences=1, do_sample=True)
-        return response[0]['generated_text']
+        response = generator(prompt, max_length=50, num_return_sequences=1, do_sample=True, temperature=0.7, top_p=0.9)
+        return response[0]['generated_text'].strip()
     except Exception as e:
         logger.error(f"Помилка при генерації відповіді: {e}")
         return "Вибачте, у мене виникли труднощі з генерацією відповіді."
@@ -43,6 +45,7 @@ async def handle_message(update: Update, context):
     logger.debug(f"Отримано повідомлення: {text[:50]}...")
 
     try:
+        start_time = time.time()  # Записуємо час початку
         # Перевірка, чи згадано бота
         if 'дарина' in text or (context.bot.username and f'@{context.bot.username.lower()}' in text):
             logger.info("Виявлено згадку бота")
@@ -58,6 +61,7 @@ async def handle_message(update: Update, context):
             logger.info(f"Відповідь надіслано: {text[:20]}...")
         else:
             logger.info("Повідомлення проігноровано")
+        logger.info(f"Час обробки запиту: {time.time() - start_time:.2f} секунд")
     except Exception as e:
         logger.error(f"Помилка при обробці повідомлення: {e}", exc_info=True)
         await message.reply_text("Вибачте, сталася помилка при обробці вашого повідомлення.")
