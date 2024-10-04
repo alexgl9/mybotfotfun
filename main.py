@@ -116,6 +116,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response_text = await generate_response(messages)
         await update.message.reply_text(response_text)
 
+    # Випадкове передбачення з відміткою користувача (1,5% шанс)
+    if random.random() < 0.015:
+        chat_members = await get_chat_members(update, context)
+        if chat_members:
+            random_user = random.choice(chat_members)
+
+            # Вибір між статичним передбаченням або передбаченням через ШІ
+            if random.random() < 0.5:
+                prediction = random.choice(static_predictions)  # Статичне передбачення
+            else:
+                prediction = await generate_ai_prediction()  # ШІ передбачення
+
+            # Відмітка користувача за юзернеймом
+            await update.message.reply_text(f"@{random_user.username}, {prediction}")
+
     # Randomly react to a message with emoji (15% chance)
     if random.random() < 0.015:
         emoji = random.choice(emojis)
