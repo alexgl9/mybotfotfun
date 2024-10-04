@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio  # Додано імпорт модуля asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
