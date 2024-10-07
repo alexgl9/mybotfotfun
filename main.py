@@ -1,6 +1,7 @@
 import os
 import random
 import openai
+import tiktoken  # Для підрахунку токенів
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from datetime import datetime, timedelta
@@ -13,6 +14,38 @@ default_role = "дівчинка Дарина, яка навчалася в ДП
 
 # List to store chat messages
 chat_history = []
+
+# Function to calculate the number of tokens
+def num_tokens_from_messages(messages, model="gpt-3.5-turbo"):
+    """Підрахунок кількості токенів у повідомленнях"""
+    encoding = tiktoken.encoding_for_model(model)
+    num_tokens = 0
+    for message in messages:
+        num_tokens += 4  # Кожне повідомлення включає роль і вміст
+        for key, value in message.items():
+            num_tokens += len(encoding.encode(value))
+    return num_tokens
+
+# Function to prune old messages
+def prune_old_messages(messages, max_tokens=16000, model="gpt-3.5-turbo"):
+    """Обрізає старі повідомлення, коли перевищено ліміт токенів."""
+    while num_tokens_from_messages(messages, model=model) > max_tokens:
+        messages.pop(0)  # Видаляємо найстаріше повідомлення
+
+# Generate a response from OpenAI
+async def generate_response(messages):
+    try:
+        # Підрахунок токенів і обрізання історії
+        prune_old_messages(messages)
+
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=messages
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        print(f"Error generating response: {e}")
+        return "На жаль, сталася помилка при генерації відповіді."
 
 # Список статичних побажань та передбачень
 static_predictions = [
