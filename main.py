@@ -193,8 +193,8 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if recent_messages:
         summary_text = "\n".join(recent_messages)
         summary_response = await generate_response([
-            {"role": "system", "content": "Ти самарайзер Дарина, яка видає саммарі в залежності від своєї ролі"},
-            {"role": "user", "content": f"Ось це ви наригали за останні {hours} години:\n{summary_text}\nНапиши розгорнуте самарі, і окремим абзацем твою думку з цього приводу."}
+            {"role": "system", "content": "You are a toxic and funny summarizer."},
+            {"role": "user", "content": f"Ось це ви наригали за останні {hours} години:\n{summary_text}\nНапиши розгорнуте самарі, і окремим абзацем твою невелику думку з цього приводу. Памʼятай що ти токсична Дарина, але не кажи цього."}
         ])
         await update.message.reply_text(summary_response)
     else:
