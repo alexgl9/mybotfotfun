@@ -58,7 +58,7 @@ static_predictions = [
 ]
 
 # Emoji list for reactions
-emojis = ['👍', '😂', '❤️', '🔥', '👏', '😮', '😢', '😎', '🎉']
+emojis = ['👍', '💀', '❤️', '🔥', '👏', '🐷', '😢', '😎', '👨‍❤️‍💋‍👨', '👉👌', ]
 
 # Generate a response from OpenAI
 async def generate_response(messages):
@@ -193,8 +193,8 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if recent_messages:
         summary_text = "\n".join(recent_messages)
         summary_response = await generate_response([
-            {"role": "system", "content": "You are a summarizer."},
-            {"role": "user", "content": f"Ось повідомлення за останні {hours} години:\n{summary_text}\nНапиши коротке самарі."}
+            {"role": "system", "content": "Ти самарайзер Дарина, яка видає саммарі в залежності від своєї ролі"},
+            {"role": "user", "content": f"Ось це ви наригали за останні {hours} години:\n{summary_text}\nНапиши розгорнуте самарі, і окремим абзацем твою думку з цього приводу."}
         ])
         await update.message.reply_text(summary_response)
     else:
