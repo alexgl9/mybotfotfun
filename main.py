@@ -64,7 +64,7 @@ emojis = ['👍', '💀', '❤️', '🔥', '👏', '🐷', '😢', '😎', '�
 async def generate_response(messages):
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # Змінено на gpt-3.5
+            model="gpt-4o-mini",  # Змінено на gpt-3.5
             messages=messages
         )
         return response['choices'][0]['message']['content']
