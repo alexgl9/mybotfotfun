@@ -16,7 +16,7 @@ default_role = "Ти — Дарина, частина дружнього чат�
 chat_history = []
 
 # Function to calculate the number of tokens
-def num_tokens_from_messages(messages, model="gpt-4o-mini"):
+def num_tokens_from_messages(messages, model="gpt-4o"):
     """Підрахунок кількості токенів у повідомленнях"""
     encoding = tiktoken.encoding_for_model(model)
     num_tokens = 0
