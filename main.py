@@ -263,6 +263,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         Якщо тема розмови змінилася, переключися на нову тему і не повертайся до попередньої без причини.
         """
     
+    # Визначаємо, кому відповідає бот
+    target_user_id = user.id
+    target_username = user.username
+    
+    # Якщо це відповідь на повідомлення іншого користувача
+    is_reply_to_message = False
+    if update.message.reply_to_message and update.message.reply_to_message.from_user.id != context.bot.id:
+        replied_user = update.message.reply_to_message.from_user
+        target_user_id = replied_user.id
+        target_username = replied_user.username
+        is_reply_to_message = True
+    
     # Формуємо системний промпт з покращеним контекстом розмови
     system_prompt = f"""
     {default_role}
@@ -278,6 +290,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     - @oleksiiriepkin можна називати "Батя"
     - @beach_face можна називати "Солодка дупка"
     - @lil_triangle можна називати "Дєд"
+    
+    ВАЖЛИВО ЩОДО ТЕГІВ: 
+    {"Ти відповідаєш на повідомлення користувача @" + target_username + ". НЕ ТЕГАЙ ЦЬОГО КОРИСТУВАЧА в своїй відповіді, оскільки ти вже відповідаєш на його повідомлення через reply." if is_reply_to_message else ""}
+    Ти можеш тегати інших користувачів з чату (@username), якщо хочеш звернутися до них або згадати їх у розмові.
     
     ВАЖЛИВО: 
     1. Чітко розрізняй користувачів і не плутай їх між собою.
@@ -315,6 +331,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if should_respond:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
         response_text = await generate_response(context_messages)
+        
+        # Додаткова перевірка, щоб не тегати користувача, якому відповідаємо
+        if is_reply_to_message and target_username:
+            # Видаляємо тег користувача, якому відповідаємо
+            tag_to_remove = f"@{target_username}"
+            response_text = response_text.replace(tag_to_remove, USERS_INFO.get(target_username, {}).get('name', target_username))
         
         # Зберігаємо відповідь бота в історію
         chat_history.append({
