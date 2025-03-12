@@ -103,11 +103,17 @@ async def generate_response(messages):
         for msg in messages[-1:]:  # Беремо тільки останнє повідомлення
             if "content" in msg:
                 content = msg["content"]
+            elif "message" in msg:
+                content = msg["message"]
             else:
-                content = msg.get("message", "")
+                content = ""
                 
             if "username" in msg and msg["username"]:
                 last_username = msg["username"]
+        
+        # Перевіряємо, чи не порожнє повідомлення
+        if not content:
+            return "Шо? Не зрозуміла... Давай ще раз, але нормально."
         
         # Формуємо промпт для DeepSeek
         system_prompt = """
@@ -151,7 +157,7 @@ async def generate_response(messages):
                 {"role": "user", "content": user_prompt}
             ],
             "temperature": 0.7,
-            "max_tokens": 500,   # Зменшуємо ліміт токенів для швидшої відповіді
+            "max_tokens": 500,
             "top_p": 0.95
         }
         
@@ -166,52 +172,62 @@ async def generate_response(messages):
             method="POST"
         )
         
-        # Встановлюємо таймаут для запиту
+        # Додаємо логування для діагностики
+        logging.info(f"Sending request to OpenRouter API with model: {DEEPSEEK_MODEL}")
+        
+        # Виконуємо запит з таймаутом
         try:
-            # Виконуємо запит синхронно, але в окремому потоці через asyncio з таймаутом
+            # Виконуємо запит синхронно, але в окремому потоці через asyncio
             loop = asyncio.get_event_loop()
-            response_future = loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=25))
-            response_data = await asyncio.wait_for(response_future, timeout=30)
-            response_data = response_data.read().decode('utf-8')
+            response_future = loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=30))
+            response_data = await asyncio.wait_for(response_future, timeout=35)
+            response_text = response_data.read().decode('utf-8')
+            
+            # Додаємо логування відповіді для діагностики
+            logging.info(f"Received response from OpenRouter API: {response_text[:100]}...")
+            
+            # Парсимо відповідь
+            result = json.loads(response_text)
+            
+            if "choices" in result and len(result["choices"]) > 0:
+                answer = result["choices"][0]["message"]["content"].strip()
+                
+                # Очищаємо відповідь від LaTeX-символів
+                answer = answer.replace("\\boxed{", "").replace("}", "")
+                answer = answer.replace("\\begin{align}", "").replace("\\end{align}", "")
+                answer = answer.replace("\\text{", "").replace("\\}", "")
+                answer = answer.replace("\\", "")
+                
+                # Перевірка на англійську мову
+                if any(phrase in answer.lower() for phrase in ["it's", "i'll", "i will", "here's"]):
+                    return "Бля, щось я затупила. Давай ще раз, але нормально."
+                
+                # Видаляємо підпис "Дарина:" якщо він є
+                answer = answer.replace("Дарина:", "").strip()
+                
+                # Додаємо випадковий емодзі з шансом 40%
+                if random.random() < 0.4:
+                    answer += " " + random.choice(emojis)
+                
+                # Перевіряємо, чи не порожня відповідь
+                if not answer or len(answer.strip()) < 5:
+                    logging.error(f"Empty or too short response from API: '{answer}'")
+                    return "Бля, щось я затупила. Давай ще раз спитай."
+                    
+                # Обмежуємо довжину, але не надто жорстко
+                return answer[:1000] if len(answer) > 1000 else answer
+            else:
+                logging.error(f"No choices in API response: {result}")
+                return "Шось пішло по пізді. Давай пізніше."
+                
         except asyncio.TimeoutError:
             logging.error("Timeout error when calling OpenRouter API")
             return "Бля, щось я задумалась і забула, що хотіла сказати. Давай ще раз."
         
-        # Парсимо відповідь
-        result = json.loads(response_data)
-        
-        if "choices" in result and len(result["choices"]) > 0:
-            answer = result["choices"][0]["message"]["content"].strip()
-            
-            # Очищаємо відповідь від LaTeX-символів
-            answer = answer.replace("\\boxed{", "").replace("}", "")
-            answer = answer.replace("\\begin{align}", "").replace("\\end{align}", "")
-            answer = answer.replace("\\text{", "").replace("\\}", "")
-            answer = answer.replace("\\", "")
-            
-            # Перевірка на англійську мову
-            if any(phrase in answer.lower() for phrase in ["it's", "i'll", "i will", "here's"]):
-                return "Бля, щось я затупила. Давай ще раз, але нормально."
-            
-            # Видаляємо підпис "Дарина:" якщо він є
-            answer = answer.replace("Дарина:", "").strip()
-            
-            # Додаємо випадковий емодзі з шансом 40%
-            if random.random() < 0.4:
-                answer += " " + random.choice(emojis)
-            
-            # Перевіряємо, чи не порожня відповідь
-            if not answer or len(answer) < 5:
-                return "Бля, щось я затупила. Давай ще раз спитай."
-                
-            # Обмежуємо довжину, але не надто жорстко
-            return answer[:1000] if len(answer) > 1000 else answer
-        
-        return "Шо? Не зрозуміла... Давай ще раз, але нормально."
-        
     except urllib.error.HTTPError as e:
-        logging.error(f"OpenRouter API Error: {e.code} - {e.read().decode('utf-8')}")
-        return "Шось пішло по пізді. Давай пізніше."
+        error_body = e.read().decode('utf-8')
+        logging.error(f"OpenRouter API Error: {e.code} - {error_body}")
+        return f"Шось пішло по пізді. Давай пізніше. Помилка: {e.code}"
     except Exception as e:
         logging.error(f"API Error: {str(e)}")
         return random.choice([
