@@ -6,9 +6,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from datetime import datetime, timedelta
 import pickle
-import logging
-import time
-import asyncio
 
 # Налаштування збереження даних
 USER_DATA_FILE = "user_data.pkl"
@@ -27,18 +24,17 @@ def save_user_data():
 # Налаштування API
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
-# Оновлюємо словник користувачів з розширеними нікнеймами
+# Додаємо словник користувачів після налаштувань API
 USERS_INFO = {
-    'digital1337': {'name': 'Каріна', 'nicknames': ['Каріна', 'Свинюшка', 'Криптоексперт']},
-    'divine_flow': {'name': 'Даніл', 'nicknames': ['Даніл', 'ватнік', 'ДАНІІЛ', 'Кальянич старший']},
-    'stepykun': {'name': 'Саша', 'nicknames': ['Стєпикін', 'Сапьок', 'Жирний']},
-    'df_dq': {'name': 'Женя', 'nicknames': ['Жека', 'Арх', 'Той хто заїбав зі своїм тцк']},
-    'ananast1a': {'name': 'Настя', 'nicknames': ['Настуська', 'Літвінова', 'Та сама тянка з лондона']},
-    'piatyhor': {'name': 'Влад', 'nicknames': ['Пʼятигор', 'Душніла']},
-    'oleksiiriepkin': {'name': 'Льоша', 'nicknames': ['Льоха', 'Батя', 'Кальянич молодший']},
-    'beach_face': {'name': 'Аня', 'nicknames': ['Анєчка', 'Солодка дупка', 'Бічфейс']},
-    'lil_triangle': {'name': 'Саша', 'nicknames': ['Дєд']},
-    'smart_darina_bot': {'name': 'Дарина', 'nicknames': ['Дарина']}
+    'digital1337': {'name': 'Каріна', 'nicknames': ['Каріна']},
+    'divine_flow': {'name': 'Даніл', 'nicknames': ['Даніл']},
+    'stepykun': {'name': 'Стєпикін', 'nicknames': ['Стєпикін']},
+    'df_dq': {'name': 'Жека', 'nicknames': ['Жека']},
+    'ananast1a': {'name': 'Настуська', 'nicknames': ['Настуська']},
+    'piatyhor': {'name': 'Пʼятигор', 'nicknames': ['Пʼятигор']},
+    'oleksiiriepkin': {'name': 'Льоха', 'nicknames': ['Льоха', 'Батя']},
+    'beach_face': {'name': 'Анєчка', 'nicknames': ['Анєчка', 'Солодка дупка']},
+    'lil_triangle': {'name': 'Саша', 'nicknames': ['Саша', 'Дєд']}
 }
 
 # Оновлюємо default_role з більшим акцентом на токсичність і гумор
@@ -80,28 +76,20 @@ def prune_old_messages(messages, max_tokens=16000, model="gpt-4-turbo"):
     while num_tokens_from_messages(messages, model=model) > max_tokens:
         messages.pop(0)
 
-# Оновлюємо функцію generate_response з обробкою помилок та збільшеним таймаутом
+# Generate a response from OpenAI
 async def generate_response(messages):
     try:
-        # Збільшуємо таймаут до 60 секунд
-        response = await client.chat.completions.create(
-            model="claude-3-haiku-20240307",
+        prune_old_messages(messages)
+        response = openai.ChatCompletion.create(
+            model="gpt-4-turbo",
             messages=messages,
-            max_tokens=1000,
-            temperature=0.9,
-            timeout=60  # Збільшуємо таймаут до 60 секунд
+            temperature=0.7,
+            max_tokens=1000
         )
-        return response.choices[0].message.content
+        return response['choices'][0]['message']['content']
     except Exception as e:
-        # Логуємо помилку
-        print(f"Помилка при генерації відповіді: {str(e)}")
-        
-        # Якщо це помилка таймауту, повертаємо спеціальне повідомлення
-        if "timeout" in str(e).lower() or "timed out" in str(e).lower():
-            return "Йой, щось я задумалась і не встигла відповісти вчасно. Давай ще раз, тільки коротше питай, бо в мене мозок закипає від твоїх довбаних повідомлень 🤯"
-        
-        # Для інших помилок повертаємо більш загальне повідомлення
-        return "Блять, в мене мозок зламався від твого питання. Спробуй ще раз, але нормально сформулюй, довбойоб 🤬"
+        print(f"Error generating response: {e}")
+        return "На жаль, сталася помилка при генерації відповіді."
 
 # Список статичних побажань та передбачень
 static_predictions = [
@@ -116,90 +104,7 @@ static_predictions = [
 # Emoji list for reactions
 emojis = ['👍', '💀', '❤️', '🔥', '👏', '🐷', '😢', '😎', '👨‍❤️‍💋‍👨', '👉👌']
 
-# Оновлення профілю користувача
-async def update_user_profile(user):
-    if user.id not in user_data:
-        user_data[user.id] = {
-            'username': user.username,
-            'first_name': user.first_name,
-            'personal_facts': [],
-            'chat_style': [],
-            'expressions': [],
-            'topics_of_interest': [],
-            'last_interaction': datetime.now()
-        }
-    else:
-        # Оновлюємо username, якщо він змінився
-        if user_data[user.id]['username'] != user.username:
-            user_data[user.id]['username'] = user.username
-    
-    user_data[user.id]['last_interaction'] = datetime.now()
-    save_user_data()
-
-# Аналіз стилю повідомлення
-def analyze_style(message):
-    style = []
-    if len(message) > 100:
-        style.append("багатослівний")
-    if any(word in message.lower() for word in ['lol', 'хаха', '😂', '🤣']):
-        style.append("жартівливий")
-    if '!' in message or message.isupper():
-        style.append("емоційний")
-    if any(word in message.lower() for word in ['блять', 'сука', 'нахуй', 'піздєц']):
-        style.append("використовує мат")
-    return ', '.join(style) if style else "нейтральний"
-
-# Вилучення фактів з повідомлення
-def extract_facts(message):
-    facts = []
-    # Особисті факти
-    if 'я народився' in message.lower() or 'мій день народження' in message.lower():
-        facts.append(f"згадував про день народження: '{message}'")
-    if 'я люблю' in message.lower() or 'мені подобається' in message.lower():
-        facts.append(f"вподобання: '{message}'")
-    if 'я ненавиджу' in message.lower() or 'мене дратуї' in message.lower():
-        facts.append(f"антипатії: '{message}'")
-    if 'я працюю' in message.lower() or 'моя робота' in message.lower():
-        facts.append(f"робота: '{message}'")
-    
-    # Характерні вирази
-    expressions = []
-    common_expressions = ['блін', 'капець', 'ого', 'вау', 'лол', 'хз', 'імхо', 'омг']
-    for expr in common_expressions:
-        if expr in message.lower():
-            expressions.append(expr)
-    
-    return facts, expressions
-
-# Визначення тем інтересів
-def identify_topics(message):
-    topics = []
-    topic_keywords = {
-        'технології': ['програмування', 'код', 'комп\'ютер', 'телефон', 'гаджет'],
-        'ігри': ['гра', 'геймінг', 'playstation', 'xbox', 'steam'],
-        'музика': ['пісня', 'альбом', 'концерт', 'слухати', 'трек'],
-        'фільми': ['фільм', 'серіал', 'кіно', 'netflix', 'дивитися'],
-        'їжа': ['їжа', 'ресторан', 'готувати', 'смачно', 'рецепт'],
-        'спорт': ['спорт', 'тренування', 'футбол', 'біг', 'фітнес']
-    }
-    
-    for topic, keywords in topic_keywords.items():
-        if any(keyword in message.lower() for keyword in keywords):
-            topics.append(topic)
-    
-    return topics
-
-# Функція для отримання випадкового звернення до користувача
-def get_random_name_for_user(username):
-    if username in USERS_INFO:
-        # 50% шанс використати ім'я, 50% - випадковий нікнейм
-        if random.random() < 0.5:
-            return USERS_INFO[username]['name']
-        else:
-            return random.choice(USERS_INFO[username]['nicknames'])
-    return username
-
-# Оновлюємо функцію handle_message з обробкою помилок
+# Оновлюємо функцію handle_message
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global chat_history
     user = update.message.from_user
@@ -315,6 +220,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     {personal_info}
     
+    {target_user_profile}
+    
+    {conversation_context}
+    
     Інформація про всіх користувачів чату:
     {', '.join([f"@{username} - {info['name']}, нікнейми: {', '.join(info['nicknames'])}" for username, info in USERS_INFO.items()])}
     
@@ -393,44 +302,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     should_respond = is_direct_mention or is_reply_to_bot or random.random() < 0.001
 
     if should_respond:
-        try:
-            await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-            
-            # Встановлюємо таймаут для генерації відповіді
-            response_text = await asyncio.wait_for(
-                generate_response(context_messages),
-                timeout=55  # Таймаут в секундах
-            )
-            
-            # Обробка тегів у відповіді - тільки для користувача, якому відповідаємо
-            if is_reply_to_message and target_username:
-                # Замінюємо тег користувача, якому відповідаємо, на випадкове звернення
-                tag_to_remove = f"@{target_username}"
-                if tag_to_remove in response_text:
-                    random_name = get_random_name_for_user(target_username)
-                    response_text = response_text.replace(tag_to_remove, random_name)
-            
-            # Зберігаємо відповідь бота в історію
-            chat_history.append({
-                "timestamp": datetime.now(),
-                "message": response_text,
-                "is_bot": True
-            })
-            
-            await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
+        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
+        response_text = await generate_response(context_messages)
         
-        except asyncio.TimeoutError:
-            # Якщо генерація відповіді займає занадто багато часу
-            error_message = "Йой, щось я задумалась і не встигла відповісти вчасно. Давай ще раз, тільки коротше питай, бо в мене мозок закипає від твоїх довбаних повідомлень 🤯"
-            await update.message.reply_text(error_message, reply_to_message_id=update.message.message_id)
+        # Додаткова перевірка, щоб не тегати користувача, якому відповідаємо
+        if is_reply_to_message and target_username:
+            # Видаляємо тег користувача, якому відповідаємо
+            tag_to_remove = f"@{target_username}"
+            response_text = response_text.replace(tag_to_remove, USERS_INFO.get(target_username, {}).get('name', target_username))
         
-        except Exception as e:
-            # Логуємо помилку
-            print(f"Помилка при обробці повідомлення: {str(e)}")
-            
-            # Відправляємо токсичне повідомлення про помилку
-            error_message = "Блять, в мене мозок зламався від твого питання. Спробуй ще раз, але нормально сформулюй, довбойоб 🤬"
-            await update.message.reply_text(error_message, reply_to_message_id=update.message.message_id)
+        # Зберігаємо відповідь бота в історію
+        chat_history.append({
+            "timestamp": datetime.now(),
+            "message": response_text,
+            "is_bot": True
+        })
+        
+        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
 
     # Випадкове передбачення
     if random.random() < 0.002:
@@ -494,27 +382,9 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("В цьому часі немає повідомлень для саммарі.")
 
-# Додаємо функцію обробки помилок
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обробляє помилки, які виникають під час роботи бота."""
-    logging.error(f"Виникла помилка: {context.error}")
-    
-    # Якщо це об'єкт Update, спробуємо відправити повідомлення про помилку
-    if isinstance(update, Update) and update.effective_message:
-        error_message = "Блять, в мене мозок зламався. Спробуй ще раз, довбойоб 🤬"
-        await update.effective_message.reply_text(error_message)
-
 def main():
     token = os.getenv('TELEGRAM_TOKEN')
-    
-    # Налаштовуємо логування
-    logging.basicConfig(
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.INFO
-    )
-    
-    # Створюємо додаток з більшими таймаутами
-    application = Application.builder().token(token).connect_timeout(20.0).read_timeout(30.0).write_timeout(30.0).build()
+    application = Application.builder().token(token).build()
 
     # Add handlers
     application.add_handler(CommandHandler("start", start))
@@ -523,17 +393,8 @@ def main():
     application.add_handler(CommandHandler("summary", summary))
     application.add_handler(CallbackQueryHandler(button))
 
-    # Додаємо обробку помилок
-    application.add_error_handler(error_handler)
-
     # Start the bot
-    try:
-        application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
-    except Exception as e:
-        logging.error(f"Критична помилка при запуску бота: {str(e)}")
-        # Спроба перезапустити бота
-        time.sleep(10)
-        main()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
