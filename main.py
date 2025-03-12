@@ -150,8 +150,8 @@ async def generate_response(messages):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            "temperature": 0.7,  # Трохи зменшуємо для більш послідовних відповідей
-            "max_tokens": 800,   # Збільшуємо ліміт токенів для повних відповідей
+            "temperature": 0.7,
+            "max_tokens": 500,   # Зменшуємо ліміт токенів для швидшої відповіді
             "top_p": 0.95
         }
         
@@ -166,9 +166,16 @@ async def generate_response(messages):
             method="POST"
         )
         
-        # Виконуємо запит синхронно, але в окремому потоці через asyncio
-        loop = asyncio.get_event_loop()
-        response_data = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req).read().decode('utf-8'))
+        # Встановлюємо таймаут для запиту
+        try:
+            # Виконуємо запит синхронно, але в окремому потоці через asyncio з таймаутом
+            loop = asyncio.get_event_loop()
+            response_future = loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=25))
+            response_data = await asyncio.wait_for(response_future, timeout=30)
+            response_data = response_data.read().decode('utf-8')
+        except asyncio.TimeoutError:
+            logging.error("Timeout error when calling OpenRouter API")
+            return "Бля, щось я задумалась і забула, що хотіла сказати. Давай ще раз."
         
         # Парсимо відповідь
         result = json.loads(response_data)
@@ -192,8 +199,13 @@ async def generate_response(messages):
             # Додаємо випадковий емодзі з шансом 40%
             if random.random() < 0.4:
                 answer += " " + random.choice(emojis)
+            
+            # Перевіряємо, чи не порожня відповідь
+            if not answer or len(answer) < 5:
+                return "Бля, щось я затупила. Давай ще раз спитай."
                 
-            return answer  # Повертаємо повну відповідь без обмеження довжини
+            # Обмежуємо довжину, але не надто жорстко
+            return answer[:1000] if len(answer) > 1000 else answer
         
         return "Шо? Не зрозуміла... Давай ще раз, але нормально."
         
@@ -260,12 +272,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             
         response = await generate_response(context_messages)
+        
+        # Перевіряємо, чи не порожня відповідь
+        if not response or len(response.strip()) < 2:
+            response = "Бля, щось я затупила. Давай ще раз спитай."
+            
         chat_history.append({
             "timestamp": datetime.now(),
             "message": response,
             "is_bot": True
         })
-        await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
+        
+        try:
+            await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
+        except Exception as e:
+            logging.error(f"Помилка при відправці повідомлення: {str(e)}")
+            # Спробуємо відправити коротшу версію
+            try:
+                await update.message.reply_text(response[:200] + "... (повідомлення обрізано)", reply_to_message_id=update.message.message_id)
+            except:
+                await update.message.reply_text("Йоб****, щось пішло не так. Спробуй ще раз.", reply_to_message_id=update.message.message_id)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Йоу, шо треба? 😎")
