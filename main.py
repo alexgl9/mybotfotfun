@@ -114,6 +114,8 @@ async def generate_response(messages):
 
 # Function to handle messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global chat_history
+    
     # Обмежуємо історію чату до MAX_HISTORY_SIZE повідомлень
     if len(chat_history) > MAX_HISTORY_SIZE:
         chat_history = chat_history[-MAX_HISTORY_SIZE:]
