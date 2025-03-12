@@ -89,8 +89,7 @@ async def generate_response(messages):
             messages=formatted,
             temperature=1.2,
             max_tokens=600,
-            stop=["</s>", "\n"],
-            repetition_penalty=1.25,
+            stop=["</s>", "\n"],  # Видалено repetition_penalty
         )
 
         if response.choices:
