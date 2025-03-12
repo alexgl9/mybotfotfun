@@ -23,7 +23,7 @@ from telegram.error import Conflict
 USER_DATA_FILE = "user_data.pkl"
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-DEEPSEEK_MODEL = "deepseek/deepseek-r1-distill-qwen-32b:free"  
+DEEPSEEK_MODEL = "anthropic/claude-3-haiku"  # Claude 3 Haiku - надійна модель
 
 # Завантаження даних користувачів
 try:
@@ -115,7 +115,7 @@ async def generate_response(messages):
         if not content:
             return "Шо? Не зрозуміла... Давай ще раз, але нормально."
         
-        # Формуємо промпт для DeepSeek
+        # Формуємо промпт для моделі
         system_prompt = """
 Ти - Дарина, токсична українська дівчина з гострим розумом. Ти маєш відповідати:
 1. ТІЛЬКИ українською мовою
@@ -131,6 +131,8 @@ async def generate_response(messages):
 - На "Поясни, як працює блокчейн": "Блять, ще один криптоінвестор. [тут має бути зрозуміле пояснення блокчейну]"
 
 НІКОЛИ не відмовляйся від виконання завдань! Завжди виконуй те, що просить користувач, навіть якщо це складно.
+
+ВАЖЛИВО: Твоя відповідь ЗАВЖДИ має містити щонайменше 20 слів. Ніколи не відповідай лише емодзі або короткими фразами.
 """
         
         # Перевіряємо, чи є в повідомленні прохання виконати завдання
@@ -138,9 +140,9 @@ async def generate_response(messages):
         is_task = any(keyword in content.lower() for keyword in task_keywords)
         
         if is_task:
-            user_prompt = f"Користувач @{last_username} просить: \"{content}\"\n\nВИКОНАЙ ЦЕ ЗАВДАННЯ ПОВНІСТЮ І ЯКІСНО. Можеш додати токсичний коментар на початку, але основну частину завдання виконай серйозно і детально."
+            user_prompt = f"Користувач @{last_username} просить: \"{content}\"\n\nВИКОНАЙ ЦЕ ЗАВДАННЯ ПОВНІСТЮ І ЯКІСНО. Можеш додати токсичний коментар на початку, але основну частину завдання виконай серйозно і детально. Твоя відповідь має бути не менше 20 слів."
         else:
-            user_prompt = f"Користувач @{last_username} пише: \"{content}\"\n\nДай розумну, дотепну і токсичну відповідь українською мовою."
+            user_prompt = f"Користувач @{last_username} пише: \"{content}\"\n\nДай розумну, дотепну і токсичну відповідь українською мовою. Твоя відповідь має бути не менше 20 слів."
         
         # Формуємо запит для OpenRouter
         headers = {
@@ -184,7 +186,7 @@ async def generate_response(messages):
             response_text = response_data.read().decode('utf-8')
             
             # Додаємо логування відповіді для діагностики
-            logging.info(f"Received response from OpenRouter API: {response_text[:100]}...")
+            logging.info(f"Received response from OpenRouter API: {response_text[:200]}...")
             
             # Парсимо відповідь
             result = json.loads(response_text)
@@ -205,14 +207,14 @@ async def generate_response(messages):
                 # Видаляємо підпис "Дарина:" якщо він є
                 answer = answer.replace("Дарина:", "").strip()
                 
-                # Додаємо випадковий емодзі з шансом 40%
-                if random.random() < 0.4:
-                    answer += " " + random.choice(emojis)
-                
-                # Перевіряємо, чи не порожня відповідь
-                if not answer or len(answer.strip()) < 5:
+                # Перевіряємо, чи не порожня відповідь або занадто коротка
+                if not answer or len(answer.strip()) < 10 or len(answer.split()) < 5:
                     logging.error(f"Empty or too short response from API: '{answer}'")
-                    return "Бля, щось я затупила. Давай ще раз спитай."
+                    return "Бля, щось я затупила. Давай ще раз спитай, але нормально."
+                
+                # Додаємо випадковий емодзі з шансом 40%
+                if random.random() < 0.4 and not any(emoji in answer for emoji in emojis):
+                    answer += " " + random.choice(emojis)
                     
                 # Обмежуємо довжину, але не надто жорстко
                 return answer[:1000] if len(answer) > 1000 else answer
@@ -227,7 +229,7 @@ async def generate_response(messages):
     except urllib.error.HTTPError as e:
         error_body = e.read().decode('utf-8')
         logging.error(f"OpenRouter API Error: {e.code} - {error_body}")
-        return f"Шось пішло по пізді. Давай пізніше. Помилка: {e.code}"
+        return f"Шось пішло по пізді. Давай пізніше."
     except Exception as e:
         logging.error(f"API Error: {str(e)}")
         return random.choice([
