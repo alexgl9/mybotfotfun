@@ -100,8 +100,15 @@ async def update_user_profile(user):
             'first_name': user.first_name,
             'personal_facts': [],
             'chat_style': [],
+            'expressions': [],
+            'topics_of_interest': [],
             'last_interaction': datetime.now()
         }
+    else:
+        # Оновлюємо username, якщо він змінився
+        if user_data[user.id]['username'] != user.username:
+            user_data[user.id]['username'] = user.username
+    
     user_data[user.id]['last_interaction'] = datetime.now()
     save_user_data()
 
@@ -110,18 +117,53 @@ def analyze_style(message):
     style = []
     if len(message) > 100:
         style.append("багатослівний")
-    if any(word in message.lower() for word in ['lol', 'хаха']):
+    if any(word in message.lower() for word in ['lol', 'хаха', '😂', '🤣']):
         style.append("жартівливий")
+    if '!' in message or message.isupper():
+        style.append("емоційний")
+    if any(word in message.lower() for word in ['блять', 'сука', 'нахуй', 'піздєц']):
+        style.append("використовує мат")
     return ', '.join(style) if style else "нейтральний"
 
 # Вилучення фактів з повідомлення
 def extract_facts(message):
     facts = []
-    if 'народився' in message:
-        facts.append("дата народження")
-    if 'люблю' in message:
-        facts.append("вподобання")
-    return facts
+    # Особисті факти
+    if 'я народився' in message.lower() or 'мій день народження' in message.lower():
+        facts.append(f"згадував про день народження: '{message}'")
+    if 'я люблю' in message.lower() or 'мені подобається' in message.lower():
+        facts.append(f"вподобання: '{message}'")
+    if 'я ненавиджу' in message.lower() or 'мене дратуї' in message.lower():
+        facts.append(f"антипатії: '{message}'")
+    if 'я працюю' in message.lower() or 'моя робота' in message.lower():
+        facts.append(f"робота: '{message}'")
+    
+    # Характерні вирази
+    expressions = []
+    common_expressions = ['блін', 'капець', 'ого', 'вау', 'лол', 'хз', 'імхо', 'омг']
+    for expr in common_expressions:
+        if expr in message.lower():
+            expressions.append(expr)
+    
+    return facts, expressions
+
+# Визначення тем інтересів
+def identify_topics(message):
+    topics = []
+    topic_keywords = {
+        'технології': ['програмування', 'код', 'комп\'ютер', 'телефон', 'гаджет'],
+        'ігри': ['гра', 'геймінг', 'playstation', 'xbox', 'steam'],
+        'музика': ['пісня', 'альбом', 'концерт', 'слухати', 'трек'],
+        'фільми': ['фільм', 'серіал', 'кіно', 'netflix', 'дивитися'],
+        'їжа': ['їжа', 'ресторан', 'готувати', 'смачно', 'рецепт'],
+        'спорт': ['спорт', 'тренування', 'футбол', 'біг', 'фітнес']
+    }
+    
+    for topic, keywords in topic_keywords.items():
+        if any(keyword in message.lower() for keyword in keywords):
+            topics.append(topic)
+    
+    return topics
 
 # Handle messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -134,13 +176,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Аналіз повідомлення
     user_data[user.id]['chat_style'].append(analyze_style(message))
-    user_data[user.id]['personal_facts'].extend(extract_facts(message))
+    facts, expressions = extract_facts(message)
+    user_data[user.id]['personal_facts'].extend(facts)
+    user_data[user.id]['expressions'].extend(expressions)
+    
+    # Визначення тем інтересів
+    topics = identify_topics(message)
+    user_data[user.id]['topics_of_interest'].extend(topics)
+    
+    # Обмеження розміру списків
+    max_items = 20
+    user_data[user.id]['personal_facts'] = user_data[user.id]['personal_facts'][-max_items:]
+    user_data[user.id]['chat_style'] = user_data[user.id]['chat_style'][-max_items:]
+    user_data[user.id]['expressions'] = list(set(user_data[user.id]['expressions']))[-max_items:]
+    user_data[user.id]['topics_of_interest'] = list(set(user_data[user.id]['topics_of_interest']))[-max_items:]
+    
+    # Зберігання даних
+    save_user_data()
     
     # Зберігання повідомлення
     chat_history.append({
         "timestamp": datetime.now(),
         "message": message,
-        "user_id": user.id
+        "user_id": user.id,
+        "username": user.username
     })
 
     # Додаємо інформацію про користувача в контекст
@@ -148,12 +207,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user.username and user.username in USERS_INFO:
         user_info = f"{user.username} ({USERS_INFO[user.username]['name']})"
     
+    # Збираємо персональну інформацію про користувача
+    personal_info = ""
+    if user.id in user_data:
+        ud = user_data[user.id]
+        personal_info = f"""
+        Персональна інформація про {user.first_name}:
+        - Стиль спілкування: {', '.join(ud['chat_style'][-3:]) if ud['chat_style'] else 'невідомо'}
+        - Характерні вирази: {', '.join(ud['expressions'][:5]) if ud['expressions'] else 'невідомо'}
+        - Теми інтересів: {', '.join(ud['topics_of_interest'][:5]) if ud['topics_of_interest'] else 'невідомо'}
+        - Факти: {'; '.join(ud['personal_facts'][-3:]) if ud['personal_facts'] else 'невідомо'}
+        """
+    
     context_messages = [{
         "role": "system",
         "content": f"""
             {default_role}
             
             Поточний користувач: {user_info}
+            
+            {personal_info}
             
             Інформація про користувачів чату:
             {', '.join([f"@{username} - {info['name']}" for username, info in USERS_INFO.items()])}
@@ -163,14 +236,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             - @beach_face можна називати "Солодка дупка"
             - @lil_triangle можна називати "Дєд"
             
-            Використовуй цю інформацію, щоб персоналізувати відповіді та звертатися до людей по імені, якщо це доречно в контексті розмови.
-            
-            Інформація про {user.first_name}:
-            - Стиль спілкування: {user_data[user.id]['chat_style'][-1]}
-            - Відомі факти: {', '.join(user_data[user.id]['personal_facts'][-3:])}
+            Використовуй цю інформацію, щоб персоналізувати відповіді. Звертайся до людей по імені, 
+            згадуй їхні інтереси, імітуй їхні характерні вирази, коментуй їхній стиль спілкування.
+            Використовуй відомі факти про людину, щоб зробити спілкування більш особистим.
         """
     }]
-    context_messages += [{"role": "user", "content": msg['message']} for msg in chat_history[-10:]]
+    
+    # Додаємо історію чату
+    recent_messages = []
+    for msg in chat_history[-10:]:
+        sender = "невідомий"
+        if 'username' in msg and msg['username'] in USERS_INFO:
+            sender = USERS_INFO[msg['username']]['name']
+        elif 'user_id' in msg and msg['user_id'] in user_data:
+            sender = user_data[msg['user_id']]['first_name']
+        
+        recent_messages.append({"role": "user", "content": f"{sender}: {msg['message']}"})
+    
+    context_messages.extend(recent_messages)
 
     # Умови відповіді
     should_respond = (
