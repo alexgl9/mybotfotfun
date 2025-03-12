@@ -22,7 +22,7 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("DARYNA_MISTRAL_TOKEN")
 
 # Ініціалізація клієнта Hugging Face
-client = InferenceClient(token=HF_TOKEN, model="meta-llama/Llama-2-70b-chat-hf")
+client = InferenceClient(token=HF_TOKEN, model="NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO")
 
 # Завантаження даних користувачів
 try:
