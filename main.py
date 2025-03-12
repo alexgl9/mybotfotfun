@@ -23,7 +23,7 @@ from telegram.error import Conflict
 USER_DATA_FILE = "user_data.pkl"
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-DEEPSEEK_MODEL = "anthropic/claude-3-sonnet"  # Claude 3 Sonnet
+DEEPSEEK_MODEL = "deepseek/deepseek-r1-lite-preview"  # Deepseek r1
 
 # Завантаження даних користувачів
 try:
