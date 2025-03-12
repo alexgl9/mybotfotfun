@@ -1,149 +1,94 @@
-import os
-import random
-import openai
-import tiktoken
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
-from datetime import datetime, timedelta
+# Додаємо глобальні змінні для зберігання контексту
+user_profiles = {}  # Зберігає інформацію про користувачів
+chat_topics = []    # Зберігає ключові теми бесіди
 
-# Налаштування API
-openai.api_key = os.getenv('OPENAI_API_KEY')
-
-# Глобальні змінні
-default_role = """
-Ти - Дарина, токсичний лідер групи в чаті. Твої характеристики:
-1. Використовуй український мат та провокаційні образи
-2. Згадуй минулі події з чату
-3. Персоналізуй атаки на основі історії користувача
-4. Реагуй на згадування свого імені або ніка
-5. Зберігай контекст бесіди
-Приклад: "О, це знову @username? Той самий, що вчора намагався зробити динаміт з цукру? Ну й піздюк 😂"
-"""
-
-chat_history = []
-user_context = {}
-static_predictions = [
-    "Сьогодні в будь який час можеш обісратися.",
-    "Твої мрії скоро здійсняться! Нарешті ти станеш батєй",
-    "Будь обережні зі своїми рішеннями найближчим часом. І взагалі будь обережніше, даун.",
-    "Очікуй приємного сюрпризу! Наприклад повістку з ТЦК ✌️",
-    "Скоро скінчиться війна. І можливо ти зʼїбешся 😉",
-    "ПІШОВ НАХУЙ 😘"
-]
-
-# Утиліти для токенів
-def num_tokens_from_messages(messages, model="gpt-3.5-turbo"):
-    encoding = tiktoken.encoding_for_model(model)
-    return sum(len(encoding.encode(msg['content'])) for msg in messages)
-
-def prune_old_messages(messages, max_tokens=14000):
-    while num_tokens_from_messages(messages) > max_tokens:
-        messages.pop(0)
-
-# Генерація відповідей
-async def generate_response(messages):
-    try:
-        prune_old_messages(messages)
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=0.9
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Йобаний сервер знову вдавився! {random.choice(['Пішов нахуй!', 'Сам це роби!', 'Говно, а не API!'])}"
-
-# Персоналізовані передбачення
-async def generate_ai_prediction(user_id):
-    user = user_context.get(user_id, {})
-    try:
-        return openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{
-                "role": "system",
-                "content": f"""Створи жорстке передбачення для {user.get('name', 'йолк')}. 
-                Використай ці теми: {', '.join(user.get('topics', ['тупість', 'нікчемність']))}.
-                Стиль: {default_role}"""
-            }]
-        )
-    except:
-        return f"{random.choice(static_predictions)} @{user.get('username', 'піздюк')}"
-
-# Обробники Telegram
+# Оновлюємо функцію handle_message
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global chat_history
+    global chat_history, user_profiles, chat_topics
     user = update.message.from_user
     message = update.message.text
-    
-    # Оновлення контексту
-    if user.id not in user_context:
-        user_context[user.id] = {
+
+    # Оновлюємо профіль користувача
+    if user.id not in user_profiles:
+        user_profiles[user.id] = {
             'username': user.username,
-            'name': user.first_name,
-            'topics': [],
-            'last_active': datetime.now()
+            'first_name': user.first_name,
+            'message_count': 0,
+            'last_message': datetime.now(),
+            'topics': []
         }
     
-    # Зберігання історії
+    user_profiles[user.id]['message_count'] += 1
+    user_profiles[user.id]['last_message'] = datetime.now()
+
+    # Аналізуємо повідомлення для виявлення тем
+    toxic_keywords = ['пізд', 'йоб', 'гандон', 'сука', 'нах', 'хуй']
+    if any(kw in message.lower() for kw in toxic_keywords):
+        chat_topics.append('токсичність')
+        user_profiles[user.id]['topics'].append('токсичність')
+
+    # Зберігаємо повідомлення в історії
     chat_history.append({
-        'user_id': user.id,
-        'text': message,
-        'timestamp': datetime.now()
+        "timestamp": datetime.now(),
+        "message": message,
+        "user_id": user.id
     })
-    
+
+    # Підготовка контексту для GPT
+    context_messages = [{"role": "system", "content": f"""
+        {default_role}
+        Контекст бесіди:
+        Учасники: {', '.join([f"{u['first_name']} (@{u['username']})" for u in user_profiles.values()])}
+        Основні теми: {', '.join(set(chat_topics))}
+        Останні повідомлення: {', '.join([msg['message'][:20] for msg in chat_history[-3:]])}
+    """}]
+
+    # Додаємо історію повідомлень
+    context_messages += [{"role": "user", "content": msg['message']} for msg in chat_history[-10:]]
+
     # Умови відповіді
     should_respond = (
-        context.bot.username.lower() in message.lower() or 
         'дарина' in message.lower() or
+        f"@{context.bot.username.lower()}" in message.lower() or
         (update.message.reply_to_message and 
          update.message.reply_to_message.from_user.id == context.bot.id)
     )
-    
-    if should_respond or random.random() < 0.0005:
-        context_msg = [
-            {"role": "system", "content": f"""
-            {default_role}
-            Актуальний контекст:
-            Учасники: {', '.join([f"{u['name']} (@{u['username']})" for u in user_context.values()])}
-            Останні повідомлення: {', '.join([msg['text'][:20] for msg in chat_history[-3:]])}
-            """},
-            *[{"role": "user", "content": msg['text']} for msg in chat_history[-10:]]
-        ]
+
+    if should_respond or random.random() < 0.001:
+        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
+        response_text = await generate_response(context_messages)
+        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
+
+    # Випадкове передбачення
+    if random.random() < 0.002:
+        active_users = [u for u in user_profiles.values() 
+                      if (datetime.now() - u['last_message']).total_seconds() < 3600]
         
-        response = await generate_response(context_msg)
-        await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
+        if active_users:
+            target_user = random.choice(active_users)
+            prediction = await generate_ai_prediction(target_user)
+            await update.message.reply_text(f"@{target_user['username']}, {prediction}")
 
-# Кнопки для зміни ролі
-async def set_role_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("Токсична сука", callback_data='toxic'), 
-         InlineKeyboardButton("П'яна шльондра", callback_data='drunk')],
-        [InlineKeyboardButton("Секс-бомба", callback_data='bomba')]
-    ]
-    await update.message.reply_text("Обирай мою нову роль:", reply_markup=InlineKeyboardMarkup(keyboard))
+# Оновлюємо функцію генерації передбачень
+async def generate_ai_prediction(target_user):
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4-turbo",
+            messages=[{
+                "role": "system",
+                "content": f"""
+                    Ти - Дарина, токсична та саркастична.
+                    Створи жорстке передбачення для {target_user['first_name']} (@{target_user['username']}).
+                    Використай ці дані:
+                    - Кількість повідомлень: {target_user['message_count']}
+                    - Улюблені теми: {', '.join(set(target_user['topics']))}
+                    Стиль: {default_role}
+                """
+            }]
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        print(f"Error generating prediction: {e}")
+        return random.choice(static_predictions)
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    global default_role
-    
-    if query.data == 'toxic':
-        default_role += " Агресивніше на 200%. Використовуй більше мату!"
-    elif query.data == 'drunk':
-        default_role += " Ти п'яна як чорт, всі твої відповіді через призму алкоголю!"
-    elif query.data == 'bomba':
-        default_role += " Твій головний інтерес - секс. Всі відповіді з еротичним підтекстом!"
-    
-    await query.edit_message_text(text=f"Нова роль активована! {random.choice(['Йди нахуй!', 'Чого ще?', 'Мені це подобається...'])}")
-
-# Запуск бота
-def main():
-    app = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
-    
-    app.add_handler(CommandHandler('role', set_role_buttons))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    app.run_polling()
-
-if __name__ == '__main__':
-    main()
+# Решта коду залишається без змін...
