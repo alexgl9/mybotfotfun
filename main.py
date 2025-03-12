@@ -72,7 +72,9 @@ async def generate_response(messages):
         prune_old_messages(messages)
         response = openai.ChatCompletion.create(
             model="gpt-4-turbo",
-            messages=messages
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1000
         )
         return response['choices'][0]['message']['content']
     except Exception as e:
@@ -194,14 +196,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Зберігання даних
     save_user_data()
     
-    # Зберігання повідомлення
+    # Зберігаємо повідомлення з додатковою інформацією про тип повідомлення
+    is_direct_mention = 'дарина' in message.lower() or f"@{context.bot.username.lower()}" in message.lower()
+    is_reply_to_bot = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
+    
+    message_type = "regular"
+    if is_direct_mention:
+        message_type = "direct_mention"
+    elif is_reply_to_bot:
+        message_type = "reply_to_bot"
+    
     chat_history.append({
         "timestamp": datetime.now(),
         "message": message,
         "user_id": user.id,
-        "username": user.username
+        "username": user.username,
+        "display_name": USERS_INFO.get(user.username, {}).get('name', user.first_name),
+        "message_type": message_type
     })
-
+    
+    # Обмежуємо історію чату, але зберігаємо більше повідомлень
+    if len(chat_history) > 50:  # Збільшуємо ліміт історії
+        chat_history = chat_history[-50:]
+    
     # Додаємо інформацію про користувача в контекст
     user_info = "невідомий користувач"
     if user.username and user.username in USERS_INFO:
@@ -219,53 +236,93 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         - Факти: {'; '.join(ud['personal_facts'][-3:]) if ud['personal_facts'] else 'невідомо'}
         """
     
-    context_messages = [{
-        "role": "system",
-        "content": f"""
-            {default_role}
-            
-            Поточний користувач: {user_info}
-            
-            {personal_info}
-            
-            Інформація про користувачів чату:
-            {', '.join([f"@{username} - {info['name']}" for username, info in USERS_INFO.items()])}
-            
-            Спеціальні звернення:
-            - @oleksiiriepkin можна називати "Батя"
-            - @beach_face можна називати "Солодка дупка"
-            - @lil_triangle можна називати "Дєд"
-            
-            Використовуй цю інформацію, щоб персоналізувати відповіді. Звертайся до людей по імені, 
-            згадуй їхні інтереси, імітуй їхні характерні вирази, коментуй їхній стиль спілкування.
-            Використовуй відомі факти про людину, щоб зробити спілкування більш особистим.
-        """
-    }]
+    # Додаємо інформацію про поточну розмову
+    conversation_context = ""
+    bot_messages = []
+    user_messages = []
     
-    # Додаємо історію чату
-    recent_messages = []
-    for msg in chat_history[-10:]:
-        sender = "невідомий"
-        if 'username' in msg and msg['username'] in USERS_INFO:
-            sender = USERS_INFO[msg['username']]['name']
-        elif 'user_id' in msg and msg['user_id'] in user_data:
-            sender = user_data[msg['user_id']]['first_name']
+    # Знаходимо останні 5 обмінів повідомленнями між ботом і користувачами
+    for i, msg in enumerate(chat_history):
+        if i > 0 and chat_history[i-1].get("is_bot", False) and not msg.get("is_bot", False):
+            # Це відповідь користувача на повідомлення бота
+            user_messages.append(msg)
+    
+    # Знаходимо останні повідомлення бота
+    for i, msg in enumerate(chat_history):
+        if msg.get("is_bot", False):
+            bot_messages.append(msg)
+    
+    # Формуємо контекст поточної розмови
+    if bot_messages and user_messages:
+        conversation_context = f"""
+        Контекст поточної розмови:
+        - Твоє останнє повідомлення було: "{bot_messages[-1]['message'] if bot_messages else 'невідомо'}"
+        - Після цього користувачі відповіли: "{user_messages[-1]['message'] if user_messages else 'невідомо'}"
         
-        recent_messages.append({"role": "user", "content": f"{sender}: {msg['message']}"})
+        ВАЖЛИВО: Не повторюй одну й ту саму відповідь. Розвивай розмову далі, враховуючи нові повідомлення.
+        Якщо тема розмови змінилася, переключися на нову тему і не повертайся до попередньої без причини.
+        """
+    
+    # Формуємо системний промпт з покращеним контекстом розмови
+    system_prompt = f"""
+    {default_role}
+    
+    ВАЖЛИВО: Ти зараз спілкуєшся з користувачем: {user_info}
+    
+    {personal_info}
+    
+    Інформація про всіх користувачів чату:
+    {', '.join([f"@{username} - {info['name']}" for username, info in USERS_INFO.items()])}
+    
+    Спеціальні звернення:
+    - @oleksiiriepkin можна називати "Батя"
+    - @beach_face можна називати "Солодка дупка"
+    - @lil_triangle можна називати "Дєд"
+    
+    ВАЖЛИВО: 
+    1. Чітко розрізняй користувачів і не плутай їх між собою.
+    2. Відстежуй зміни в темі розмови і адаптуйся до них.
+    3. Не повторюй одні й ті самі відповіді.
+    4. Якщо тобі задали нове питання або дали нове завдання, сконцентруйся на ньому, 
+       а не на попередніх темах розмови.
+    """
+    
+    context_messages = [{"role": "system", "content": system_prompt}]
+    
+    # Додаємо історію чату з чіткими ідентифікаторами та розділенням на ролі
+    recent_messages = []
+    for msg in chat_history[-15:]:  # Збільшуємо кількість повідомлень в контексті
+        sender_name = msg.get('display_name', 'невідомий')
+        if 'username' in msg and msg['username']:
+            sender_username = f"@{msg['username']}"
+        else:
+            sender_username = ""
+        
+        role = "user"
+        if msg.get("is_bot", False):
+            role = "assistant"
+            content = msg['message']
+        else:
+            content = f"{sender_name} {sender_username}: {msg['message']}"
+        
+        recent_messages.append({"role": role, "content": content})
     
     context_messages.extend(recent_messages)
 
     # Умови відповіді
-    should_respond = (
-        'дарина' in message.lower() or
-        f"@{context.bot.username.lower()}" in message.lower() or
-        (update.message.reply_to_message and 
-         update.message.reply_to_message.from_user.id == context.bot.id)
-    )
+    should_respond = is_direct_mention or is_reply_to_bot or random.random() < 0.001
 
-    if should_respond or random.random() < 0.001:
+    if should_respond:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
         response_text = await generate_response(context_messages)
+        
+        # Зберігаємо відповідь бота в історію
+        chat_history.append({
+            "timestamp": datetime.now(),
+            "message": response_text,
+            "is_bot": True
+        })
+        
         await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
 
     # Випадкове передбачення
