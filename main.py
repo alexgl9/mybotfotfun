@@ -6,6 +6,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from datetime import datetime, timedelta
 import pickle
+import logging
+import time
+import asyncio
 
 # Налаштування збереження даних
 USER_DATA_FILE = "user_data.pkl"
@@ -77,20 +80,28 @@ def prune_old_messages(messages, max_tokens=16000, model="gpt-4-turbo"):
     while num_tokens_from_messages(messages, model=model) > max_tokens:
         messages.pop(0)
 
-# Generate a response from OpenAI
+# Оновлюємо функцію generate_response з обробкою помилок та збільшеним таймаутом
 async def generate_response(messages):
     try:
-        prune_old_messages(messages)
-        response = openai.ChatCompletion.create(
-            model="gpt-4-turbo",
+        # Збільшуємо таймаут до 60 секунд
+        response = await client.chat.completions.create(
+            model="claude-3-haiku-20240307",
             messages=messages,
-            temperature=0.7,
-            max_tokens=1000
+            max_tokens=1000,
+            temperature=0.9,
+            timeout=60  # Збільшуємо таймаут до 60 секунд
         )
-        return response['choices'][0]['message']['content']
+        return response.choices[0].message.content
     except Exception as e:
-        print(f"Error generating response: {e}")
-        return "На жаль, сталася помилка при генерації відповіді."
+        # Логуємо помилку
+        print(f"Помилка при генерації відповіді: {str(e)}")
+        
+        # Якщо це помилка таймауту, повертаємо спеціальне повідомлення
+        if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+            return "Йой, щось я задумалась і не встигла відповісти вчасно. Давай ще раз, тільки коротше питай, бо в мене мозок закипає від твоїх довбаних повідомлень 🤯"
+        
+        # Для інших помилок повертаємо більш загальне повідомлення
+        return "Блять, в мене мозок зламався від твого питання. Спробуй ще раз, але нормально сформулюй, довбойоб 🤬"
 
 # Список статичних побажань та передбачень
 static_predictions = [
@@ -188,7 +199,7 @@ def get_random_name_for_user(username):
             return random.choice(USERS_INFO[username]['nicknames'])
     return username
 
-# Оновлюємо функцію handle_message
+# Оновлюємо функцію handle_message з обробкою помилок
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global chat_history
     user = update.message.from_user
@@ -382,25 +393,44 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     should_respond = is_direct_mention or is_reply_to_bot or random.random() < 0.001
 
     if should_respond:
-        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        response_text = await generate_response(context_messages)
+        try:
+            await context.bot.send_chat_action(update.effective_chat.id, action="typing")
+            
+            # Встановлюємо таймаут для генерації відповіді
+            response_text = await asyncio.wait_for(
+                generate_response(context_messages),
+                timeout=55  # Таймаут в секундах
+            )
+            
+            # Обробка тегів у відповіді - тільки для користувача, якому відповідаємо
+            if is_reply_to_message and target_username:
+                # Замінюємо тег користувача, якому відповідаємо, на випадкове звернення
+                tag_to_remove = f"@{target_username}"
+                if tag_to_remove in response_text:
+                    random_name = get_random_name_for_user(target_username)
+                    response_text = response_text.replace(tag_to_remove, random_name)
+            
+            # Зберігаємо відповідь бота в історію
+            chat_history.append({
+                "timestamp": datetime.now(),
+                "message": response_text,
+                "is_bot": True
+            })
+            
+            await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
         
-        # Обробка тегів у відповіді - тільки для користувача, якому відповідаємо
-        if is_reply_to_message and target_username:
-            # Замінюємо тег користувача, якому відповідаємо, на випадкове звернення
-            tag_to_remove = f"@{target_username}"
-            if tag_to_remove in response_text:
-                random_name = get_random_name_for_user(target_username)
-                response_text = response_text.replace(tag_to_remove, random_name)
+        except asyncio.TimeoutError:
+            # Якщо генерація відповіді займає занадто багато часу
+            error_message = "Йой, щось я задумалась і не встигла відповісти вчасно. Давай ще раз, тільки коротше питай, бо в мене мозок закипає від твоїх довбаних повідомлень 🤯"
+            await update.message.reply_text(error_message, reply_to_message_id=update.message.message_id)
         
-        # Зберігаємо відповідь бота в історію
-        chat_history.append({
-            "timestamp": datetime.now(),
-            "message": response_text,
-            "is_bot": True
-        })
-        
-        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
+        except Exception as e:
+            # Логуємо помилку
+            print(f"Помилка при обробці повідомлення: {str(e)}")
+            
+            # Відправляємо токсичне повідомлення про помилку
+            error_message = "Блять, в мене мозок зламався від твого питання. Спробуй ще раз, але нормально сформулюй, довбойоб 🤬"
+            await update.message.reply_text(error_message, reply_to_message_id=update.message.message_id)
 
     # Випадкове передбачення
     if random.random() < 0.002:
@@ -464,9 +494,27 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("В цьому часі немає повідомлень для саммарі.")
 
+# Додаємо функцію обробки помилок
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обробляє помилки, які виникають під час роботи бота."""
+    logging.error(f"Виникла помилка: {context.error}")
+    
+    # Якщо це об'єкт Update, спробуємо відправити повідомлення про помилку
+    if isinstance(update, Update) and update.effective_message:
+        error_message = "Блять, в мене мозок зламався. Спробуй ще раз, довбойоб 🤬"
+        await update.effective_message.reply_text(error_message)
+
 def main():
     token = os.getenv('TELEGRAM_TOKEN')
-    application = Application.builder().token(token).build()
+    
+    # Налаштовуємо логування
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO
+    )
+    
+    # Створюємо додаток з більшими таймаутами
+    application = Application.builder().token(token).connect_timeout(20.0).read_timeout(30.0).write_timeout(30.0).build()
 
     # Add handlers
     application.add_handler(CommandHandler("start", start))
@@ -475,8 +523,17 @@ def main():
     application.add_handler(CommandHandler("summary", summary))
     application.add_handler(CallbackQueryHandler(button))
 
+    # Додаємо обробку помилок
+    application.add_error_handler(error_handler)
+
     # Start the bot
-    application.run_polling()
+    try:
+        application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    except Exception as e:
+        logging.error(f"Критична помилка при запуску бота: {str(e)}")
+        # Спроба перезапустити бота
+        time.sleep(10)
+        main()
 
 if __name__ == '__main__':
     main()
