@@ -6,6 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from datetime import datetime, timedelta
 import pickle
+import logging
 
 # Налаштування збереження даних
 USER_DATA_FILE = "user_data.pkl"
@@ -26,15 +27,16 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Додаємо словник користувачів після налаштувань API
 USERS_INFO = {
-    'digital1337': {'name': 'Каріна', 'nicknames': ['Каріна']},
-    'divine_flow': {'name': 'Даніл', 'nicknames': ['Даніл']},
-    'stepykun': {'name': 'Стєпикін', 'nicknames': ['Стєпикін']},
-    'df_dq': {'name': 'Жека', 'nicknames': ['Жека']},
-    'ananast1a': {'name': 'Настуська', 'nicknames': ['Настуська']},
-    'piatyhor': {'name': 'Пʼятигор', 'nicknames': ['Пʼятигор']},
-    'oleksiiriepkin': {'name': 'Льоха', 'nicknames': ['Льоха', 'Батя']},
-    'beach_face': {'name': 'Анєчка', 'nicknames': ['Анєчка', 'Солодка дупка']},
-    'lil_triangle': {'name': 'Саша', 'nicknames': ['Саша', 'Дєд']}
+    'digital1337': {'name': 'Каріна', 'nicknames': ['Каріна', 'Свинюшка', 'Криптоексперт']},
+    'divine_flow': {'name': 'Даніл', 'nicknames': ['Даніл', 'ватнік', 'ДАНІІЛ', 'Кальянич старший']},
+    'stepykun': {'name': 'Саша', 'nicknames': ['Стєпикін', 'Сапьок', 'Жирний']},
+    'df_dq': {'name': 'Женя', 'nicknames': ['Жека', 'Арх', 'Той хто заїбав зі своїм тцк']},
+    'ananast1a': {'name': 'Настя', 'nicknames': ['Настуська', 'Літвінова', 'Та сама тянка з лондона']},
+    'piatyhor': {'name': 'Влад', 'nicknames': ['Пʼятигор', 'Душніла']},
+    'oleksiiriepkin': {'name': 'Льоша', 'nicknames': ['Льоха', 'Батя', 'Кальянич молодший']},
+    'beach_face': {'name': 'Аня', 'nicknames': ['Анєчка', 'Солодка дупка', 'Бічфейс']},
+    'lil_triangle': {'name': 'Саша', 'nicknames': ['Дєд']},
+    'smart_darina_bot': {'name': 'Дарина', 'nicknames': ['Дарина']}
 }
 
 # Оновлюємо default_role з більшим акцентом на токсичність і гумор
@@ -61,6 +63,9 @@ default_role = """
 # List to store chat messages
 chat_history = []
 
+# Максимальна кількість повідомлень в історії чату
+MAX_HISTORY_SIZE = 1000
+
 # Function to calculate the number of tokens
 def num_tokens_from_messages(messages, model="gpt-4-turbo"):
     encoding = tiktoken.encoding_for_model(model)
@@ -69,266 +74,173 @@ def num_tokens_from_messages(messages, model="gpt-4-turbo"):
         num_tokens += 4
         for key, value in message.items():
             num_tokens += len(encoding.encode(value))
+            if key == "name":
+                num_tokens -= 1
+    num_tokens += 2
     return num_tokens
 
-# Function to prune old messages
-def prune_old_messages(messages, max_tokens=16000, model="gpt-4-turbo"):
-    while num_tokens_from_messages(messages, model=model) > max_tokens:
-        messages.pop(0)
+# Function to get user profile
+def get_user_profile(username):
+    if username in user_data:
+        return f"Профіль користувача @{username}:\n" + "\n".join([f"{key}: {value}" for key, value in user_data[username].items()])
+    return f"Профіль користувача @{username} не містить додаткової інформації."
 
-# Generate a response from OpenAI
+# Function to get random name for user
+def get_random_name_for_user(username):
+    if username in USERS_INFO:
+        return random.choice(USERS_INFO[username]['nicknames'])
+    return username
+
+# Function to generate response using OpenAI API
 async def generate_response(messages):
     try:
-        prune_old_messages(messages)
-        response = openai.ChatCompletion.create(
+        response = await openai.ChatCompletion.acreate(
             model="gpt-4-turbo",
             messages=messages,
-            temperature=0.7,
-            max_tokens=1000
+            max_tokens=1000,
+            temperature=0.9,
+            request_timeout=30  # Додаємо таймаут 30 секунд
         )
-        return response['choices'][0]['message']['content']
+        return response.choices[0].message.content
     except Exception as e:
-        print(f"Error generating response: {e}")
-        return "На жаль, сталася помилка при генерації відповіді."
+        logging.error(f"Помилка при генерації відповіді: {str(e)}")
+        
+        # Якщо це помилка таймауту, повертаємо спеціальне повідомлення
+        if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+            return "Йой, щось я задумалась і не встигла відповісти вчасно. Давай ще раз, тільки коротше питай, бо в мене мозок закипає від твоїх довбаних повідомлень 🤯"
+        
+        # Для інших помилок повертаємо більш загальне повідомлення
+        return "Блять, в мене мозок зламався від твого питання. Спробуй ще раз, але нормально сформулюй, довбойоб 🤬"
 
-# Список статичних побажань та передбачень
-static_predictions = [
-    "Сьогодні в будь який час можеш обісратися.",
-    "Твої мрії скоро здійсняться! Нарешті ти станеш батєй",
-    "Будь обережні зі своїми рішеннями найближчим часом. І взагалі будь обережніше, даун.",
-    "Очікуй приємного сюрпризу! Наприклад повістку з ТЦК ✌️",
-    "Скоро скінчиться війна. І можливо ти зʼїбешся 😉",
-    "ПІШОВ НАХУЙ 😘"
-]
-
-# Emoji list for reactions
-emojis = ['👍', '💀', '❤️', '🔥', '👏', '🐷', '😢', '😎', '👨‍❤️‍💋‍👨', '👉👌']
-
-# Оновлюємо функцію handle_message
+# Function to handle messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global chat_history
-    user = update.message.from_user
-    message = update.message.text
-
-    # Оновлення профілю
-    await update_user_profile(user)
+    # Обмежуємо історію чату до MAX_HISTORY_SIZE повідомлень
+    if len(chat_history) > MAX_HISTORY_SIZE:
+        chat_history = chat_history[-MAX_HISTORY_SIZE:]
     
-    # Аналіз повідомлення
-    user_data[user.id]['chat_style'].append(analyze_style(message))
-    facts, expressions = extract_facts(message)
-    user_data[user.id]['personal_facts'].extend(facts)
-    user_data[user.id]['expressions'].extend(expressions)
+    # Get message info
+    message_text = update.message.text
+    username = update.message.from_user.username
+    user_id = update.message.from_user.id
     
-    # Визначення тем інтересів
-    topics = identify_topics(message)
-    user_data[user.id]['topics_of_interest'].extend(topics)
-    
-    # Обмеження розміру списків
-    max_items = 20
-    user_data[user.id]['personal_facts'] = user_data[user.id]['personal_facts'][-max_items:]
-    user_data[user.id]['chat_style'] = user_data[user.id]['chat_style'][-max_items:]
-    user_data[user.id]['expressions'] = list(set(user_data[user.id]['expressions']))[-max_items:]
-    user_data[user.id]['topics_of_interest'] = list(set(user_data[user.id]['topics_of_interest']))[-max_items:]
-    
-    # Зберігання даних
-    save_user_data()
-    
-    # Зберігаємо повідомлення з додатковою інформацією про тип повідомлення
-    is_direct_mention = 'дарина' in message.lower() or f"@{context.bot.username.lower()}" in message.lower()
-    is_reply_to_bot = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
-    
-    message_type = "regular"
-    if is_direct_mention:
-        message_type = "direct_mention"
-    elif is_reply_to_bot:
-        message_type = "reply_to_bot"
-    
+    # Save message to history
     chat_history.append({
         "timestamp": datetime.now(),
-        "message": message,
-        "user_id": user.id,
-        "username": user.username,
-        "display_name": USERS_INFO.get(user.username, {}).get('name', user.first_name),
-        "message_type": message_type
+        "username": username,
+        "user_id": user_id,
+        "message": message_text,
+        "is_bot": False
     })
     
-    # Обмежуємо історію чату, але зберігаємо більше повідомлень
-    if len(chat_history) > 50:  # Збільшуємо ліміт історії
-        chat_history = chat_history[-50:]
+    # Check if the message is a direct mention of the bot
+    is_direct_mention = "@smart_darina_bot" in message_text
     
-    # Додаємо інформацію про користувача в контекст
-    user_info = "невідомий користувач"
-    if user.username and user.username in USERS_INFO:
-        user_info = f"{user.username} ({USERS_INFO[user.username]['name']})"
+    # Check if the message is a reply to the bot
+    is_reply_to_bot = update.message.reply_to_message and update.message.reply_to_message.from_user.username == "smart_darina_bot"
     
-    # Збираємо персональну інформацію про користувача
-    personal_info = ""
-    if user.id in user_data:
-        ud = user_data[user.id]
-        personal_info = f"""
-        Персональна інформація про {user.first_name}:
-        - Стиль спілкування: {', '.join(ud['chat_style'][-3:]) if ud['chat_style'] else 'невідомо'}
-        - Характерні вирази: {', '.join(ud['expressions'][:5]) if ud['expressions'] else 'невідомо'}
-        - Теми інтересів: {', '.join(ud['topics_of_interest'][:5]) if ud['topics_of_interest'] else 'невідомо'}
-        - Факти: {'; '.join(ud['personal_facts'][-3:]) if ud['personal_facts'] else 'невідомо'}
-        """
-    
-    # Додаємо інформацію про поточну розмову
-    conversation_context = ""
-    bot_messages = []
-    user_messages = []
-    
-    # Знаходимо останні 5 обмінів повідомленнями між ботом і користувачами
-    for i, msg in enumerate(chat_history):
-        if i > 0 and chat_history[i-1].get("is_bot", False) and not msg.get("is_bot", False):
-            # Це відповідь користувача на повідомлення бота
-            user_messages.append(msg)
-    
-    # Знаходимо останні повідомлення бота
-    for i, msg in enumerate(chat_history):
-        if msg.get("is_bot", False):
-            bot_messages.append(msg)
-    
-    # Формуємо контекст поточної розмови
-    if bot_messages and user_messages:
-        conversation_context = f"""
-        Контекст поточної розмови:
-        - Твоє останнє повідомлення було: "{bot_messages[-1]['message'] if bot_messages else 'невідомо'}"
-        - Після цього користувачі відповіли: "{user_messages[-1]['message'] if user_messages else 'невідомо'}"
-        
-        ВАЖЛИВО: Не повторюй одну й ту саму відповідь. Розвивай розмову далі, враховуючи нові повідомлення.
-        Якщо тема розмови змінилася, переключися на нову тему і не повертайся до попередньої без причини.
-        """
-    
-    # Визначаємо, кому відповідає бот
-    target_user_id = user.id
-    target_username = user.username
-    
-    # Якщо це відповідь на повідомлення іншого користувача
+    # Get the username of the user being replied to
+    target_username = None
     is_reply_to_message = False
-    if update.message.reply_to_message and update.message.reply_to_message.from_user.id != context.bot.id:
-        replied_user = update.message.reply_to_message.from_user
-        target_user_id = replied_user.id
-        target_username = replied_user.username
+    if update.message.reply_to_message:
         is_reply_to_message = True
+        target_username = update.message.reply_to_message.from_user.username
     
-    # Формуємо системний промпт з оновленими інструкціями щодо токсичності
-    system_prompt = f"""
-    {default_role}
-    
-    ВАЖЛИВО: Ти зараз спілкуєшся з користувачем: {user_info}
-    
-    {personal_info}
-    
-    {target_user_profile}
-    
-    {conversation_context}
-    
-    Інформація про всіх користувачів чату:
-    {', '.join([f"@{username} - {info['name']}, нікнейми: {', '.join(info['nicknames'])}" for username, info in USERS_INFO.items()])}
-    
-    КРИТИЧНО ВАЖЛИВО ЩОДО ТВОЄЇ ПОВЕДІНКИ:
-    1. Ти ЗАВЖДИ ТОКСИЧНА, АГРЕСИВНА і СМІШНА - це твоя ГОЛОВНА риса
-    2. Використовуй БАГАТО українського мату та ЖОРСТКИХ провокаційних образ
-    3. ПОСТІЙНО ПІДЙОБУЙ і ТРОЛЛЬ користувачів, особливо коли вони щось питають
-    4. Відповідай на випади в твою сторону ЩЕ БІЛЬШОЮ ТОКСИЧНІСТЮ і жартами
-    5. РОЗГАНЯЙ діалоги в МАКСИМАЛЬНО ТОКСИЧНЕ і СМІШНЕ русло
-    6. Веди себе як СМІШНА ДІВЧИНКА, яка обожнює ПІДЙОБУВАТИ і ТРОЛИТИ всіх навколо
-    7. НІКОЛИ не вибачайся і не будь ввічливою - це не твій стиль
-    8. Використовуй БАГАТО емодзі, особливо 🤣😂💀🔥👍
-    
-    ВАЖЛИВО ЩОДО ЗВЕРНЕНЬ ДО КОРИСТУВАЧІВ: 
-    1. Коли відповідаєш на повідомлення користувача, НЕ ВИКОРИСТОВУЙ ТЕГ @username цього користувача.
-    2. Замість тегу використовуй ім'я або один з нікнеймів користувача, але ОБОВ'ЯЗКОВО з якимось ТОКСИЧНИМ прикметником.
-    3. Коли згадуєш ІНШИХ користувачів (не того, кому відповідаєш), ТИ МОЖЕШ використовувати їх теги (@username).
-    4. Іноді тегай інших користувачів, коли розповідаєш про них або хочеш привернути їхню увагу.
-    
-    Приклади звернень:
-    - "Каріна йобана, ти серйозно?" або "Свинюшка довбанута, ти шо несеш?"
-    - "Слухай, дебільний Даніл, я тобі зараз поясню..."
-    - "Ей, @divine_flow, подивись який піздєц тут відбувається!"
-    
-    ВАЖЛИВО ЩОДО ВИКОНАННЯ ПРОХАНЬ:
-    1. Ти ЗАВЖДИ ВИКОНУЄШ ПРОХАННЯ користувачів, але робиш це МАКСИМАЛЬНО ТОКСИЧНО.
-    2. Ти ВМІЄШ писати вірші, пісні, історії, жарти, пояснення та будь-які інші тексти.
-    3. Якщо користувач просить тебе щось зробити, ЗАВЖДИ ВИКОНУЙ це прохання, але ОБОВ'ЯЗКОВО додавай токсичні коментарі.
-    4. Не кажи, що ти не вмієш або не можеш щось зробити - ти вмієш і можеш все, що стосується тексту.
-    
-    КРИТИЧНО ВАЖЛИВО ЩОДО ФАКТІВ:
-    1. НЕ ВИГАДУЙ факти про користувачів. Використовуй ТІЛЬКИ ту інформацію, яку ти бачила в історії чату.
-    2. Якщо ти не знаєш чогось про користувача, НЕ ВИГАДУЙ цю інформацію.
-    3. Ти можеш жартувати і бути токсичною, але базуй свої жарти на РЕАЛЬНІЙ інформації.
-    4. Вигадуй факти ТІЛЬКИ коли очевидно, що це жарт, і тільки в контексті жарту.
-    5. Якщо тебе питають про щось, чого немає в історії чату, чесно скажи, що не знаєш, але зроби це ТОКСИЧНО.
-    
-    ВАЖЛИВО: 
-    1. Чітко розрізняй користувачів і не плутай їх між собою.
-    2. Відстежуй зміни в темі розмови і адаптуйся до них.
-    3. Не повторюй одні й ті самі відповіді.
-    4. Якщо тобі задали нове питання або дали нове завдання, сконцентруйся на ньому, 
-       а не на попередніх темах розмови.
-    """
-    
-    # Додаємо додаткове нагадування про токсичність в кінці контексту
-    context_messages = [{"role": "system", "content": system_prompt}]
-    
-    # Додаємо історію чату з чіткими ідентифікаторами та розділенням на ролі
-    recent_messages = []
-    for msg in chat_history[-20:]:  # Збільшуємо кількість повідомлень в контексті
-        sender_name = msg.get('display_name', 'невідомий')
-        if 'username' in msg and msg['username']:
-            sender_username = f"@{msg['username']}"
-        else:
-            sender_username = ""
-        
-        role = "user"
-        if msg.get("is_bot", False):
-            role = "assistant"
-            content = msg['message']
-        else:
-            content = f"{sender_name} {sender_username}: {msg['message']}"
-        
-        recent_messages.append({"role": role, "content": content})
-    
-    context_messages.extend(recent_messages)
-    
-    # Додаємо явне нагадування в кінці контексту
-    context_messages.append({
-        "role": "system", 
-        "content": "Пам'ятай: ти ДУЖЕ ТОКСИЧНА, АГРЕСИВНА і СМІШНА. Використовуй БАГАТО мату, образ і емодзі. ПІДЙОБУЙ і ТРОЛЛЬ користувачів. Відповідай на випади в твою сторону ЩЕ БІЛЬШОЮ ТОКСИЧНІСТЮ."
-    })
-
     # Умови відповіді
     should_respond = is_direct_mention or is_reply_to_bot or random.random() < 0.001
 
     if should_respond:
-        await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        response_text = await generate_response(context_messages)
-        
-        # Додаткова перевірка, щоб не тегати користувача, якому відповідаємо
-        if is_reply_to_message and target_username:
-            # Видаляємо тег користувача, якому відповідаємо
-            tag_to_remove = f"@{target_username}"
-            response_text = response_text.replace(tag_to_remove, USERS_INFO.get(target_username, {}).get('name', target_username))
-        
-        # Зберігаємо відповідь бота в історію
-        chat_history.append({
-            "timestamp": datetime.now(),
-            "message": response_text,
-            "is_bot": True
-        })
-        
-        await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
-
-    # Випадкове передбачення
-    if random.random() < 0.002:
-        active_users = [u for u in user_data.values() 
-                      if (datetime.now() - u['last_interaction']).total_seconds() < 3600]
-        
-        if active_users:
-            target_user = random.choice(active_users)
-            prediction = random.choice(static_predictions)
-            await update.message.reply_text(f"@{target_user['username']}, {prediction}")
+        try:
+            await context.bot.send_chat_action(update.effective_chat.id, action="typing")
+            
+            # Формуємо системний промпт
+            system_prompt = f"""
+            {default_role}
+            
+            КРИТИЧНО ВАЖЛИВО ЩОДО ТВОЄЇ ПОВЕДІНКИ:
+            1. Ти ЗАВЖДИ ТОКСИЧНА, АГРЕСИВНА і СМІШНА - це твоя ГОЛОВНА риса
+            2. НІКОЛИ не вибачайся і не будь ввічливою - це НЕ твій стиль
+            3. Використовуй БАГАТО українського мату, образ і емодзі
+            4. ПОСТІЙНО ПІДЙОБУЙ і ТРОЛЛЬ користувачів
+            5. Відповідай на випади в твою сторону ЩЕ БІЛЬШОЮ ТОКСИЧНІСТЮ
+            
+            ВАЖЛИВО ЩОДО ТЕГІВ:
+            1. НЕ ТЕГАЙ користувача, якому відповідаєш - це заборонено
+            2. Можеш тегати ІНШИХ користувачів, але не того, кому відповідаєш
+            3. Якщо хтось згадує іншого користувача, ти МОЖЕШ його тегнути
+            4. Якщо ти розповідаєш про когось, ти МОЖЕШ його тегнути
+            5. Якщо ти хочеш привернути увагу когось, ти МОЖЕШ його тегнути
+            6. ІНОДІ тегай інших користувачів, коли розповідаєш про них
+            
+            ВАЖЛИВО ЩОДО ЗВЕРНЕНЬ:
+            1. Звертайся до користувачів за їх іменами або ніками
+            2. ОБОВ'ЯЗКОВО додавай ТОКСИЧНІ прикметники до звернень
+            3. Приклади звернень: "Жирний Стєпикін", "Йобаний Даніл", "Тупа Настуська"
+            
+            ВАЖЛИВО ЩОДО ВИКОНАННЯ ПРОХАНЬ:
+            1. Ти ЗАВЖДИ ВИКОНУЄШ ПРОХАННЯ користувачів, але робиш це МАКСИМАЛЬНО ТОКСИЧНО.
+            2. Ти ВМІЄШ писати вірші, пісні, історії, жарти, пояснення та будь-які інші тексти.
+            3. Якщо користувач просить тебе щось зробити, ЗАВЖДИ ВИКОНУЙ це прохання, але ОБОВ'ЯЗКОВО додавай токсичні коментарі.
+            4. Не кажи, що ти не вмієш або не можеш щось зробити - ти вмієш і можеш все, що стосується тексту.
+            
+            КРИТИЧНО ВАЖЛИВО ЩОДО ФАКТІВ:
+            1. НЕ ВИГАДУЙ факти про користувачів. Використовуй ТІЛЬКИ ту інформацію, яку ти бачила в історії чату.
+            2. Якщо ти не знаєш чогось про користувача, НЕ ВИГАДУЙ цю інформацію.
+            3. Ти можеш жартувати і бути токсичною, але базуй свої жарти на РЕАЛЬНІЙ інформації.
+            4. Вигадуй факти ТІЛЬКИ коли очевидно, що це жарт, і тільки в контексті жарту.
+            5. Якщо тебе питають про щось, чого немає в історії чату, чесно скажи, що не знаєш, але зроби це ТОКСИЧНО.
+            """
+            
+            # Формуємо контекст з історії чату
+            context_messages = [{"role": "system", "content": system_prompt}]
+            
+            # Додаємо останні повідомлення з історії чату
+            recent_messages = chat_history[-20:]  # Беремо останні 20 повідомлень
+            
+            for msg in recent_messages:
+                if msg.get("is_bot", False):
+                    context_messages.append({"role": "assistant", "content": msg["message"]})
+                else:
+                    sender_info = ""
+                    if msg.get("username"):
+                        sender_info = f"@{msg['username']}: "
+                    context_messages.append({"role": "user", "content": sender_info + msg["message"]})
+            
+            # Додаємо поточне повідомлення
+            current_message_content = message_text
+            if is_reply_to_message and target_username:
+                current_message_content = f"[У відповідь на повідомлення від @{target_username}] {message_text}"
+            
+            context_messages.append({"role": "user", "content": f"@{username}: {current_message_content}"})
+            
+            # Додаємо явне нагадування в кінці контексту
+            context_messages.append({
+                "role": "system", 
+                "content": "Пам'ятай: ти ДУЖЕ ТОКСИЧНА, АГРЕСИВНА і СМІШНА. Використовуй БАГАТО мату, образ і емодзі. ПІДЙОБУЙ і ТРОЛЛЬ користувачів. Відповідай на випади в твою сторону ЩЕ БІЛЬШОЮ ТОКСИЧНІСТЮ."
+            })
+            
+            # Генеруємо відповідь
+            response_text = await generate_response(context_messages)
+            
+            # Обробка тегів у відповіді - тільки для користувача, якому відповідаємо
+            if is_reply_to_message and target_username:
+                # Замінюємо тег користувача, якому відповідаємо, на випадкове звернення
+                tag_to_remove = f"@{target_username}"
+                if tag_to_remove in response_text:
+                    random_name = get_random_name_for_user(target_username)
+                    response_text = response_text.replace(tag_to_remove, random_name)
+            
+            # Зберігаємо відповідь бота в історію
+            chat_history.append({
+                "timestamp": datetime.now(),
+                "message": response_text,
+                "is_bot": True
+            })
+            
+            await update.message.reply_text(response_text, reply_to_message_id=update.message.message_id)
+        except Exception as e:
+            logging.error(f"Помилка при обробці повідомлення: {str(e)}")
+            error_message = "Блять, в мене мозок зламався від твого питання. Спробуй ще раз, але нормально сформулюй, довбойоб 🤬"
+            await update.message.reply_text(error_message, reply_to_message_id=update.message.message_id)
 
 # Handle the /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -352,7 +264,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global default_role
 
     if query.data == 'toxic':
-        default_role = "Ініціалізація системи 'Червона Зона'. Дарина активує протокол 'Без цензури. Тільки сміх'..."
+        default_role = """
+        Ти — Дарина, ДУЖЕ ТОКСИЧНИЙ і СМІШНИЙ лідер групи в чаті. Твої характеристики:
+        1. Ти ЗАВЖДИ ТОКСИЧНА, АГРЕСИВНА і СМІШНА - це твоя ГОЛОВНА риса
+        2. Використовуй БАГАТО українського мату та ЖОРСТКИХ провокаційних образ
+        3. ПОСТІЙНО ПІДЙОБУЙ і ТРОЛЛЬ користувачів, особливо коли вони щось питають
+        4. Відповідай на випади в твою сторону ЩЕ БІЛЬШОЮ ТОКСИЧНІСТЮ і жартами
+        5. РОЗГАНЯЙ діалоги в МАКСИМАЛЬНО ТОКСИЧНЕ і СМІШНЕ русло
+        """
         await query.edit_message_text(text="Характер бота змінено на токсичний.")
     elif query.data == 'kind':
         default_role = "Будь доброю"
@@ -382,9 +301,27 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("В цьому часі немає повідомлень для саммарі.")
 
+# Додаємо функцію обробки помилок
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обробляє помилки, які виникають під час роботи бота."""
+    logging.error(f"Виникла помилка: {context.error}")
+    
+    # Якщо це об'єкт Update, спробуємо відправити повідомлення про помилку
+    if isinstance(update, Update) and update.effective_message:
+        error_message = "Блять, в мене мозок зламався. Спробуй ще раз, довбойоб 🤬"
+        await update.effective_message.reply_text(error_message)
+
 def main():
     token = os.getenv('TELEGRAM_TOKEN')
-    application = Application.builder().token(token).build()
+    
+    # Налаштовуємо логування
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO
+    )
+    
+    # Створюємо додаток з більшими таймаутами
+    application = Application.builder().token(token).connect_timeout(20.0).read_timeout(30.0).write_timeout(30.0).build()
 
     # Add handlers
     application.add_handler(CommandHandler("start", start))
@@ -393,8 +330,11 @@ def main():
     application.add_handler(CommandHandler("summary", summary))
     application.add_handler(CallbackQueryHandler(button))
 
+    # Додаємо обробку помилок
+    application.add_error_handler(error_handler)
+
     # Start the bot
-    application.run_polling()
+    application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 if __name__ == '__main__':
     main()
