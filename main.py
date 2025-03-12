@@ -24,6 +24,19 @@ def save_user_data():
 # Налаштування API
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
+# Додаємо словник користувачів після налаштувань API
+USERS_INFO = {
+    'digital1337': {'name': 'Каріна', 'nicknames': ['Каріна']},
+    'divine_flow': {'name': 'Даніл', 'nicknames': ['Даніл']},
+    'stepykun': {'name': 'Стєпикін', 'nicknames': ['Стєпикін']},
+    'df_dq': {'name': 'Жека', 'nicknames': ['Жека']},
+    'ananast1a': {'name': 'Настуська', 'nicknames': ['Настуська']},
+    'piatyhor': {'name': 'Пʼятигор', 'nicknames': ['Пʼятигор']},
+    'oleksiiriepkin': {'name': 'Льоха', 'nicknames': ['Льоха', 'Батя']},
+    'beach_face': {'name': 'Анєчка', 'nicknames': ['Анєчка', 'Солодка дупка']},
+    'lil_triangle': {'name': 'Саша', 'nicknames': ['Саша', 'Дєд']}
+}
+
 # Default role
 default_role = """
 Ти — Дарина, токсичний лідер групи в чаті. Твої характеристики:
@@ -130,11 +143,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "user_id": user.id
     })
 
-    # Підготовка контексту
+    # Додаємо інформацію про користувача в контекст
+    user_info = "невідомий користувач"
+    if user.username and user.username in USERS_INFO:
+        user_info = f"{user.username} ({USERS_INFO[user.username]['name']})"
+    
     context_messages = [{
         "role": "system",
         "content": f"""
             {default_role}
+            
+            Поточний користувач: {user_info}
+            
+            Інформація про користувачів чату:
+            {', '.join([f"@{username} - {info['name']}" for username, info in USERS_INFO.items()])}
+            
+            Спеціальні звернення:
+            - @oleksiiriepkin можна називати "Батя"
+            - @beach_face можна називати "Солодка дупка"
+            - @lil_triangle можна називати "Дєд"
+            
+            Використовуй цю інформацію, щоб персоналізувати відповіді та звертатися до людей по імені, якщо це доречно в контексті розмови.
+            
             Інформація про {user.first_name}:
             - Стиль спілкування: {user_data[user.id]['chat_style'][-1]}
             - Відомі факти: {', '.join(user_data[user.id]['personal_facts'][-3:])}
