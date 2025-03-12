@@ -23,7 +23,7 @@ from telegram.error import Conflict
 USER_DATA_FILE = "user_data.pkl"
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-DEEPSEEK_MODEL = "deepseek/deepseek-r1-lite-preview"
+DEEPSEEK_MODEL = "anthropic/claude-3-sonnet"  # Claude 3 Sonnet
 
 # Завантаження даних користувачів
 try:
@@ -268,6 +268,42 @@ def estimate_tokens(messages):
 def prune_old_messages(messages, max_tokens=8000):
     while estimate_tokens(messages) > max_tokens and len(messages) > 3:
         messages.pop(0)
+
+# Функція для отримання списку доступних моделей
+async def get_available_models():
+    try:
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        # Створюємо запит
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/models",
+            headers=headers,
+            method="GET"
+        )
+        
+        # Виконуємо запит
+        loop = asyncio.get_event_loop()
+        response_data = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req).read().decode('utf-8'))
+        
+        # Парсимо відповідь
+        result = json.loads(response_data)
+        
+        # Виводимо список моделей
+        for model in result.get("data", []):
+            logging.info(f"Available model: {model.get('id')}")
+        
+        return result.get("data", [])
+        
+    except Exception as e:
+        logging.error(f"Error getting models: {str(e)}")
+        return []
+
+# Додаємо виклик функції при запуску
+async def on_startup(application):
+    await get_available_models()
 
 def main():
     # Налаштування логування
