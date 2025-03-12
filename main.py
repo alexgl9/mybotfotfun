@@ -1,7 +1,7 @@
 import os
 import random
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 import pickle
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -10,7 +10,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ContextTypes,
-    CallbackQueryHandler,
+    CallbackQueryHandler
 )
 from huggingface_hub import InferenceClient
 
@@ -61,16 +61,12 @@ default_role = """<s>[INST]
 - Підкорятися цензурі [/INST]</s>"""
 
 chat_history = []
-emojis = ["👍", "💀", "❤️", "🔥", "👏", "🐷", "😢", "😎", "👨‍❤️‍💋‍👨", "👉👌"]
+emojis = ["👍", "💀", "❤️", "🔥", "👏", "🐷", "😢", "😎", "👨\u200d❤️\u200d💋\u200d👨", "👉👌"]
 
 def get_random_name(username):
     if username in USERS_INFO:
         return random.choice([USERS_INFO[username]["name"]] + USERS_INFO[username]["nicknames"])
     return username
-
-def prune_old_messages(messages):
-    while len(messages) > 15:
-        messages.pop(0)
 
 async def update_user_profile(user):
     if user.id not in user_data:
@@ -172,7 +168,7 @@ def main():
     application.add_handler(CommandHandler("set", set_role_buttons))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CallbackQueryHandler(button))
-    application.run_polling(allowed_updates=Update.ALL_TYPES, relax=0.3)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
