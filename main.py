@@ -109,30 +109,34 @@ async def generate_response(messages):
             "content": "Зрозуміло, я буду токсичною українською дівчиною Дариною. Буду відповідати тільки українською з матюками, коротко і по суті."
         })
         
-        # Додаємо останні повідомлення з чату, зберігаючи чергування
-        user_content = ""
-        for idx, msg in enumerate(messages[-8:]):  # Обмежуємо кількість повідомлень
+        # Отримуємо останнє повідомлення користувача
+        last_message = ""
+        last_username = ""
+        
+        for msg in messages[-3:]:  # Беремо останні 3 повідомлення
             if "content" in msg:
                 content = msg["content"]
             else:
                 content = msg.get("message", "")
-                if "username" in msg and msg["username"]:
-                    content = f"@{msg['username']}: {content}"
-            
-            user_content += content + "\n"
+                
+            if "username" in msg and msg["username"]:
+                last_username = msg["username"]
+                content = f"@{msg['username']}: {content}"
+                
+            last_message += content + "\n"
         
-        # Додаємо всі повідомлення користувача як одне
-        if user_content:
+        # Додаємо останнє повідомлення користувача
+        if last_message:
             formatted_messages.append({
                 "role": "user",
-                "content": user_content
+                "content": f"Ось повідомлення користувача: {last_message}\n\nДай токсичну, коротку відповідь українською мовою з матюками. Не нумеруй відповідь. Не перераховуй правила. Просто відповідай як токсична дівчина."
             })
         
         # Викликаємо Mistral API
         response = client.chat_completion(
             messages=formatted_messages,
             temperature=0.9,
-            max_tokens=500,
+            max_tokens=300,
             top_p=0.95
         )
         
@@ -140,19 +144,19 @@ async def generate_response(messages):
             answer = response.choices[0].message.content
             answer = answer.replace("Assistant:", "").strip()
             
-            # Перевірка на англійську мову або шаблонні фрази
-            if any(phrase in answer.lower() for phrase in ["it's a", "i'll", "i will", "here's", "tarot"]):
+            # Перевірка на англійську мову
+            if any(phrase in answer.lower() for phrase in ["it's", "i'll", "i will", "here's", "tarot"]):
                 return "Бля, щось я затупила. Давай ще раз, але нормально."
             
-            # Перевірка на занадто короткі відповіді
-            if len(answer) < 10:
+            # Перевірка на нумерацію та шаблонні фрази
+            if answer.startswith("1.") or "я - токсична" in answer.lower() or "я буду токсичною" in answer.lower():
                 return "Йобана система глючить. Спитай ще раз, відповім нормально."
             
             # Додаємо випадковий емодзі з шансом 30%
             if random.random() < 0.3:
                 answer += " " + random.choice(emojis)
                 
-            return answer[:500]  # Обмеження довжини
+            return answer[:300]  # Обмеження довжини
             
         return "Шо? Не зрозуміла... Давай ще раз, але нормально."
         
