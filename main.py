@@ -144,6 +144,12 @@ async def generate_response(messages):
         if "choices" in result and len(result["choices"]) > 0:
             answer = result["choices"][0]["message"]["content"].strip()
             
+            # Очищаємо відповідь від LaTeX-символів
+            answer = answer.replace("\\boxed{", "").replace("}", "")
+            answer = answer.replace("\\begin{align}", "").replace("\\end{align}", "")
+            answer = answer.replace("\\text{", "").replace("\\}", "")
+            answer = answer.replace("\\", "")
+            
             # Перевірка на англійську мову
             if any(phrase in answer.lower() for phrase in ["it's", "i'll", "i will", "here's"]):
                 return "Бля, щось я затупила. Давай ще раз, але нормально."
