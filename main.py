@@ -2,6 +2,8 @@ import os
 import random
 import logging
 import asyncio
+import json
+import aiohttp
 from datetime import datetime, timedelta
 import pickle
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -14,15 +16,12 @@ from telegram.ext import (
     CallbackQueryHandler
 )
 from telegram.error import Conflict
-from huggingface_hub import InferenceClient
 
 # Налаштування
 USER_DATA_FILE = "user_data.pkl"
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_TOKEN = os.getenv("DARYNA_MISTRAL_TOKEN")
-
-# Ініціалізація клієнта Hugging Face
-client = InferenceClient(token=HF_TOKEN, model="NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+DEEPSEEK_MODEL = "deepseek-ai/deepseek-r1-lite-preview"
 
 # Завантаження даних користувачів
 try:
@@ -98,43 +97,55 @@ async def generate_response(messages):
                 
             if "username" in msg and msg["username"]:
                 last_username = msg["username"]
-                
-        # Формуємо промпт з прикладами
-        prompt = f"""<s>[INST] {default_role}
-
-Користувач @{last_username} пише: "{content}"
-
-Дай розумну, дотепну і токсичну відповідь українською мовою. Не підписуй себе як "Дарина:". Просто відповідай. [/INST]</s>"""
         
-        # Викликаємо API
-        response = client.text_generation(
-            prompt=prompt,
-            max_new_tokens=150,  # Зменшуємо для коротших відповідей
-            temperature=0.8,
-            top_p=0.95,
-            do_sample=True
-        )
+        # Формуємо промпт для DeepSeek
+        system_prompt = default_role
+        user_prompt = f"Користувач @{last_username} пише: \"{content}\"\n\nДай розумну, дотепну і токсичну відповідь українською мовою."
         
-        if response:
-            # Очищаємо відповідь
-            answer = response.strip()
-            
-            # Видаляємо все до першого речення відповіді
-            if "[/INST]" in answer:
-                answer = answer.split("[/INST]")[1].strip()
-            
-            # Видаляємо підпис "Дарина:" якщо він є
-            answer = answer.replace("Дарина:", "").strip()
-            
-            # Перевірка на англійську мову
-            if any(phrase in answer.lower() for phrase in ["it's", "i'll", "i will", "here's"]):
-                return "Бля, щось я затупила. Давай ще раз, але нормально."
-            
-            # Додаємо випадковий емодзі з шансом 40%
-            if random.random() < 0.4:
-                answer += " " + random.choice(emojis)
-                
-            return answer[:250]  # Обмеження довжини
+        # Формуємо запит для OpenRouter
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://t.me/smart_darina_bot",  # Замініть на ваш домен
+            "X-Title": "Smart Darina Bot"  # Назва вашого додатку
+        }
+        
+        payload = {
+            "model": DEEPSEEK_MODEL,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.8,
+            "max_tokens": 250,
+            "top_p": 0.95
+        }
+        
+        # Відправляємо запит до OpenRouter
+        async with aiohttp.ClientSession() as session:
+            async with session.post("https://openrouter.ai/api/v1/chat/completions", 
+                                   headers=headers, 
+                                   json=payload) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    if "choices" in result and len(result["choices"]) > 0:
+                        answer = result["choices"][0]["message"]["content"].strip()
+                        
+                        # Перевірка на англійську мову
+                        if any(phrase in answer.lower() for phrase in ["it's", "i'll", "i will", "here's"]):
+                            return "Бля, щось я затупила. Давай ще раз, але нормально."
+                        
+                        # Видаляємо підпис "Дарина:" якщо він є
+                        answer = answer.replace("Дарина:", "").strip()
+                        
+                        # Додаємо випадковий емодзі з шансом 40%
+                        if random.random() < 0.4:
+                            answer += " " + random.choice(emojis)
+                            
+                        return answer[:250]  # Обмеження довжини
+                else:
+                    logging.error(f"OpenRouter API Error: {response.status} - {await response.text()}")
+                    return "Шось пішло по пізді. Давай пізніше."
             
         return "Шо? Не зрозуміла... Давай ще раз, але нормально."
         
