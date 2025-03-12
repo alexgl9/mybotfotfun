@@ -173,6 +173,15 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Помилка: {context.error}")
 
 def main():
+     # Налаштування логування
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("telegram").setLevel(logging.WARNING)
+    
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO  # Можна змінити на WARNING для ще менших логів
+    )
+
     application = Application.builder().token(TOKEN).build()
     application.add_error_handler(error_handler)
     application.add_handler(CommandHandler("start", start))
