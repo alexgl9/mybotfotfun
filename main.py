@@ -15,7 +15,6 @@ from telegram.ext import (
 )
 from telegram.error import Conflict
 from huggingface_hub import InferenceClient
-import tiktoken
 
 # Налаштування
 USER_DATA_FILE = "user_data.pkl"
@@ -221,6 +220,20 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.application.start()
     else:
         logging.error(f"Помилка: {context.error}")
+
+# Замінюємо функцію підрахунку токенів на просту оцінку
+def estimate_tokens(messages):
+    # Груба оцінка: приблизно 4 токени на слово
+    total_words = 0
+    for message in messages:
+        if "content" in message:
+            total_words += len(message["content"].split())
+    return total_words * 4
+
+# Функція для обмеження історії чату
+def prune_old_messages(messages, max_tokens=8000):
+    while estimate_tokens(messages) > max_tokens and len(messages) > 3:
+        messages.pop(0)
 
 def main():
     # Налаштування логування
