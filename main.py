@@ -3,7 +3,9 @@ import random
 import logging
 import asyncio
 import json
-import aiohttp
+import urllib.request
+import urllib.error
+import urllib.parse
 from datetime import datetime, timedelta
 import pickle
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -106,8 +108,8 @@ async def generate_response(messages):
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://t.me/smart_darina_bot",  # Замініть на ваш домен
-            "X-Title": "Smart Darina Bot"  # Назва вашого додатку
+            "HTTP-Referer": "https://t.me/smart_darina_bot",
+            "X-Title": "Smart Darina Bot"
         }
         
         payload = {
@@ -121,34 +123,45 @@ async def generate_response(messages):
             "top_p": 0.95
         }
         
-        # Відправляємо запит до OpenRouter
-        async with aiohttp.ClientSession() as session:
-            async with session.post("https://openrouter.ai/api/v1/chat/completions", 
-                                   headers=headers, 
-                                   json=payload) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    if "choices" in result and len(result["choices"]) > 0:
-                        answer = result["choices"][0]["message"]["content"].strip()
-                        
-                        # Перевірка на англійську мову
-                        if any(phrase in answer.lower() for phrase in ["it's", "i'll", "i will", "here's"]):
-                            return "Бля, щось я затупила. Давай ще раз, але нормально."
-                        
-                        # Видаляємо підпис "Дарина:" якщо він є
-                        answer = answer.replace("Дарина:", "").strip()
-                        
-                        # Додаємо випадковий емодзі з шансом 40%
-                        if random.random() < 0.4:
-                            answer += " " + random.choice(emojis)
-                            
-                        return answer[:250]  # Обмеження довжини
-                else:
-                    logging.error(f"OpenRouter API Error: {response.status} - {await response.text()}")
-                    return "Шось пішло по пізді. Давай пізніше."
+        # Перетворюємо payload в JSON
+        data = json.dumps(payload).encode('utf-8')
+        
+        # Створюємо запит
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=data,
+            headers=headers,
+            method="POST"
+        )
+        
+        # Виконуємо запит синхронно, але в окремому потоці через asyncio
+        loop = asyncio.get_event_loop()
+        response_data = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req).read().decode('utf-8'))
+        
+        # Парсимо відповідь
+        result = json.loads(response_data)
+        
+        if "choices" in result and len(result["choices"]) > 0:
+            answer = result["choices"][0]["message"]["content"].strip()
             
+            # Перевірка на англійську мову
+            if any(phrase in answer.lower() for phrase in ["it's", "i'll", "i will", "here's"]):
+                return "Бля, щось я затупила. Давай ще раз, але нормально."
+            
+            # Видаляємо підпис "Дарина:" якщо він є
+            answer = answer.replace("Дарина:", "").strip()
+            
+            # Додаємо випадковий емодзі з шансом 40%
+            if random.random() < 0.4:
+                answer += " " + random.choice(emojis)
+                
+            return answer[:250]  # Обмеження довжини
+        
         return "Шо? Не зрозуміла... Давай ще раз, але нормально."
         
+    except urllib.error.HTTPError as e:
+        logging.error(f"OpenRouter API Error: {e.code} - {e.read().decode('utf-8')}")
+        return "Шось пішло по пізді. Давай пізніше."
     except Exception as e:
         logging.error(f"API Error: {str(e)}")
         return random.choice([
