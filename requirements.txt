@@ -1,5 +1,4 @@
+huggingface_hub>=0.22.2
 python-telegram-bot==20.5
-huggingface_hub==0.22.2
 tiktoken==0.5.1
 python-dotenv==1.0.0
-pickle5==1.0.1; python_version < '3.8'
