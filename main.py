@@ -155,11 +155,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text
     await update_user_profile(user)
 
+    # Перевіряємо умови для відповіді
     is_direct_mention = "дарина" in message.lower()
     is_reply_to_bot = (
         update.message.reply_to_message
         and update.message.reply_to_message.from_user.id == context.bot.id
     )
+    
+    # Додаємо дуже рідкісний шанс втручання (0.0001%)
+    random_intervention = random.random() < 0.000001
 
     chat_history.append({
         "timestamp": datetime.now(),
@@ -172,16 +176,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(chat_history) > 30:
         chat_history.pop(0)
 
-    if is_direct_mention or is_reply_to_bot or random.random() < 0.3:
+    # Відповідаємо, якщо є згадка, відповідь на повідомлення бота, або дуже рідкісне втручання
+    if is_direct_mention or is_reply_to_bot or random_intervention:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        context_messages = [
-            {
-                "role": "assistant" if msg.get("is_bot") else "user",
-                "message": msg["message"],
-                "username": msg.get("username", "")
-            }
-            for msg in chat_history[-10:]
-        ]
+        
+        # Якщо це рідкісне втручання, додаємо спеціальний контекст
+        if random_intervention:
+            context_messages = [{
+                "role": "user",
+                "message": "НЕСПОДІВАНО ПЕРЕБИЙ РОЗМОВУ З ДУЖЕ ТОКСИЧНИМ КОМЕНТАРЕМ ПО КОНТЕКСТУ ОСТАННЬОГО ПОВІДОМЛЕННЯ",
+                "username": user.username
+            }]
+        else:
+            context_messages = [
+                {
+                    "role": "assistant" if msg.get("is_bot") else "user",
+                    "message": msg["message"],
+                    "username": msg.get("username", "")
+                }
+                for msg in chat_history[-10:]
+            ]
+            
         response = await generate_response(context_messages)
         chat_history.append({
             "timestamp": datetime.now(),
