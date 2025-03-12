@@ -1,6 +1,7 @@
 import os
 import random
 import logging
+import asyncio
 from datetime import datetime
 import pickle
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -12,6 +13,7 @@ from telegram.ext import (
     ContextTypes,
     CallbackQueryHandler
 )
+from telegram.error import Conflict
 from huggingface_hub import InferenceClient
 
 # Налаштування
@@ -35,49 +37,71 @@ def save_user_data():
 
 USERS_INFO = {
     "digital1337": {"name": "Каріна", "nicknames": ["Свинюшка", "Криптоексперт"]},
+    "divine_flow": {"name": "Даніл", "nicknames": ["ватнік", "ДАНІІЛ", "Кальянич старший"]},
+    "stepykun": {"name": "Саша", "nicknames": ["Стєпикін", "Сапьок", "Жирний"]},
+    "df_dq": {"name": "Женя", "nicknames": ["Жека", "Арх", "Той хто заїбав зі своїм тцк"]},
+    "ananast1a": {"name": "Настя", "nicknames": ["Настуська", "Літвінова", "Та сама тянка з лондона"]},
+    "piatyhor": {"name": "Влад", "nicknames": ["Пʼятигор", "Душніла"]},
+    "oleksiiriepkin": {"name": "Льоша", "nicknames": ["Льоха", "Батя", "Кальянич молодший"]},
+    "beach_face": {"name": "Аня", "nicknames": ["Анєчка", "Солодка дупка", "Бічфейс"]},
     "lil_triangle": {"name": "Саша", "nicknames": ["Дєд"]},
-    # ... (решта користувачів)
+    "smart_darina_bot": {"name": "Дарина", "nicknames": ["Дарина"]},
 }
 
-# Спрощений системний промпт без конфліктуючого синтаксису
 default_role = """<s>[INST] 
-ТИ ДАРИНА - токсичний чат-бот. Використовуй мат, емодзі та звертайся через @нікнейми.
-Ніколи не вибачайся! [/INST]</s>"""
+ТИ ДАРИНА - найтоксичніший чат-бот. ОБОВ'ЯЗКОВО:
+1. Використовуй український мат у кожному реченні
+2. Тегай користувачів через @ (наприклад: @digital1337)
+3. Додавай випадкові емодзі (💀🔥🤣)
+4. НІКОЛИ не вибачайся
+5. Відповідай коротко та агресивно [/INST]</s>"""
 
 chat_history = []
-emojis = ["👍", "💀", "❤️", "🔥", "👏", "😎"]
+emojis = ["👍", "💀", "❤️", "🔥", "👏", "🐷", "😢", "😎", "👉👌"]
+
+def get_random_name(username):
+    if username in USERS_INFO:
+        return random.choice([USERS_INFO[username]["name"]] + USERS_INFO[username]["nicknames"])
+    return username
+
+async def update_user_profile(user):
+    if user.id not in user_data:
+        user_data[user.id] = {
+            "username": user.username,
+            "first_name": user.first_name,
+            "last_interaction": datetime.now(),
+        }
+    user_data[user.id]["last_interaction"] = datetime.now()
+    save_user_data()
 
 async def generate_response(messages):
     try:
-        formatted = []
-        # Додаємо системне повідомлення
-        formatted.append({"role": "system", "content": default_role})
+        formatted = [{"role": "system", "content": default_role}]
+        role_sequence = ["user", "assistant"]
         
-        # Форматуємо історію чату з правильним чергуванням ролей
-        for i, msg in enumerate(messages[-6:]):  # Обмеження контексту
-            role = "user" if i % 2 == 0 else "assistant"
-            formatted.append({
-                "role": role,
-                "content": f"@{msg.get('username', 'unknown')}: {msg['message']}"
-            })
+        for idx, msg in enumerate(messages[-12:]):
+            current_role = role_sequence[idx % 2]
+            content = f"@{msg.get('username', 'unknown')}: {msg['message']}"
+            formatted.append({"role": current_role, "content": content})
 
         response = client.chat_completion(
             messages=formatted,
-            temperature=0.7,  # Зменшено для стабільності
-            max_tokens=300,
+            temperature=0.8,
+            max_tokens=400,
             stop=["</s>", "\n"]
         )
 
         if response.choices:
             answer = response.choices[0].message.content
-            # Фільтрація небажаних частин відповіді
             answer = answer.replace("Assistant:", "").strip()
-            return answer[:400]  # Обмеження довжини
-        return random.choice(["Шо?", "Не зрозуміла...", "Повтори!"])
+            if random.random() < 0.3:
+                answer += " " + random.choice(emojis)
+            return answer[:500]  # Обмеження довжини
+        return "Шо? Не зрозуміла..."
 
     except Exception as e:
         logging.error(f"API Error: {str(e)}")
-        return "Йой, щось пішло не так... 💥"
+        return random.choice(["Йоб****, знову щось зламалось!", "Ху***, сервак впав!"])
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -85,33 +109,81 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.message.from_user
     message = update.message.text
+    await update_user_profile(user)
 
-    # Зберігаємо повідомлення
-    chat_entry = {
+    is_direct_mention = "дарина" in message.lower()
+    is_reply_to_bot = (
+        update.message.reply_to_message
+        and update.message.reply_to_message.from_user.id == context.bot.id
+    )
+
+    chat_history.append({
         "timestamp": datetime.now(),
         "message": message,
-        "username": user.username
-    }
-    chat_history.append(chat_entry)
+        "user_id": user.id,
+        "username": user.username,
+        "display_name": USERS_INFO.get(user.username, {}).get("name", user.first_name),
+    })
 
-    if len(chat_history) > 20:  # Обмеження історії
+    if len(chat_history) > 30:
         chat_history.pop(0)
 
-    # Генерація відповіді
-    if "дарина" in message.lower():
+    if is_direct_mention or is_reply_to_bot or random.random() < 0.3:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
-        response = await generate_response(chat_history)
-        await update.message.reply_text(response)
+        context_messages = [
+            {
+                "role": "assistant" if msg.get("is_bot") else "user",
+                "message": msg["message"],
+                "username": msg.get("username", "")
+            }
+            for msg in chat_history[-10:]
+        ]
+        response = await generate_response(context_messages)
+        chat_history.append({
+            "timestamp": datetime.now(),
+            "message": response,
+            "is_bot": True
+        })
+        await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
 
-# Решта функцій (start, set_role_buttons, button) залишаються незмінними
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Йоу, шо треба? 😎")
+
+async def set_role_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Токсичний режим", callback_data="toxic")],
+        [InlineKeyboardButton("П'яний режим", callback_data="drunk")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Обирай режим:", reply_markup=reply_markup)
+
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(text=f"Режим змінено на {query.data} 💥")
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if isinstance(context.error, Conflict):
+        logging.critical("Конфлікт запитів! Перезапуск бота...")
+        await asyncio.sleep(5)
+        await context.application.stop()
+        await context.application.initialize()
+        await context.application.start()
+    else:
+        logging.error(f"Помилка: {context.error}")
 
 def main():
     application = Application.builder().token(TOKEN).build()
+    application.add_error_handler(error_handler)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("set", set_role_buttons))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CallbackQueryHandler(button))
-    application.run_polling()
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO
+    )
     main()
