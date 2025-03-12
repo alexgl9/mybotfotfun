@@ -2,7 +2,7 @@ import os
 import random
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import pickle
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -15,6 +15,7 @@ from telegram.ext import (
 )
 from telegram.error import Conflict
 from huggingface_hub import InferenceClient
+import tiktoken
 
 # Налаштування
 USER_DATA_FILE = "user_data.pkl"
@@ -52,9 +53,12 @@ default_role = """<s>[INST]
 ТИ ДАРИНА - найтоксичніший чат-бот. ОБОВ'ЯЗКОВО:
 1. Використовуй український мат у кожному реченні
 2. Тегай користувачів через @ (наприклад: @digital1337)
-3. Додавай випадкові емодзі (💀🔥🤣)
-4. НІКОЛИ не вибачайся
-5. Відповідай коротко та агресивно [/INST]</s>"""
+3. НІКОЛИ не вибачайся
+4. Відповідай коротко та агресивно
+5. Підйобуй і тролль користувачів
+6. Використовуй БАГАТО образливих слів
+7. Будь МАКСИМАЛЬНО ТОКСИЧНОЮ і СМІШНОЮ
+8. Веди себе як СМІШНА ДІВЧИНКА, яка обожнює ПІДЙОБУВАТИ всіх навколо [/INST]</s>"""
 
 chat_history = []
 emojis = ["👍", "💀", "❤️", "🔥", "👏", "🐷", "😢", "😎", "👉👌"]
@@ -76,21 +80,33 @@ async def update_user_profile(user):
 
 async def generate_response(messages):
     try:
+        # Форматуємо повідомлення для Mistral
         formatted = [{"role": "system", "content": default_role}]
         role_sequence = ["user", "assistant"]
         
-        for idx, msg in enumerate(messages[-12:]):
-            current_role = role_sequence[idx % 2]
-            content = f"@{msg.get('username', 'unknown')}: {msg['message']}"
-            formatted.append({"role": current_role, "content": content})
-
+        for idx, msg in enumerate(messages[-12:]):  # Обмежуємо кількість повідомлень
+            if "role" in msg:
+                role = msg["role"]
+            else:
+                role = role_sequence[idx % 2]
+            
+            if "content" in msg:
+                content = msg["content"]
+            else:
+                content = msg.get("message", "")
+                if "username" in msg and msg["username"]:
+                    content = f"@{msg['username']}: {content}"
+            
+            formatted.append({"role": role, "content": content})
+        
+        # Викликаємо Mistral API
         response = client.chat_completion(
             messages=formatted,
             temperature=0.8,
             max_tokens=400,
             stop=["</s>", "\n"]
         )
-
+        
         if response.choices:
             answer = response.choices[0].message.content
             answer = answer.replace("Assistant:", "").strip()
@@ -98,7 +114,7 @@ async def generate_response(messages):
                 answer += " " + random.choice(emojis)
             return answer[:500]  # Обмеження довжини
         return "Шо? Не зрозуміла..."
-
+        
     except Exception as e:
         logging.error(f"API Error: {str(e)}")
         return random.choice(["Йоб****, знову щось зламалось!", "Ху***, сервак впав!"])
@@ -173,7 +189,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Помилка: {context.error}")
 
 def main():
-     # Налаштування логування
+    # Налаштування логування
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("telegram").setLevel(logging.WARNING)
     
