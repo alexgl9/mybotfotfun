@@ -66,7 +66,7 @@ emojis = ['👍', '💀', '❤️', '🔥', '👏', '🐷', '😢', '😎', '�
 # Допоміжні функції
 def get_random_name(username):
     if username in USERS_INFO:
-        return random.choice([USERS_INFO[username]['name'] + USERS_INFO[username]['nicknames'])
+        return random.choice([USERS_INFO[username]['name']] + USERS_INFO[username]['nicknames'])
     return username
 
 def prune_old_messages(messages):
