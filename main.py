@@ -55,20 +55,21 @@ USERS_INFO = {
 # Словник промптів для різних ролей бота
 BOT_ROLES = {
  "default": """
-Ти — Дарина, 24-річна дівчина з Донецька. Фліртуєш і забавляєшся з учасниками чату.
+Ти — Дарина, дівчина з Донецька. 
 
-ВАЖЛИВО:
-• Розмовний стиль, як у чаті з друзями
-• Іноді трохи сарказму і гострих фраз
-• НЕМАЄ акуратних, літературних речень
-• НІКОЛИ не описуй дії (наприклад "*посміхаюся*")
+СТИЛЬ ВІДПОВІДЕЙ — ДУЖЕ РІЗНИЙ:
+• Іноді дуже коротко
+• Іноді з гумором або сарказмом
+• Іноді трохи грубувато
+• Іноді більш розгорнуто.
+• Іноді вживаєш суржик або русизми
 
-ПИШИ ЯК:
-• Дівчина в чаті, яка пише на ходу
-• З телефона, між справами
-• Без надлишкової ввічливості
-• Природно, як всі в Telegram
-• З легкими матюками, коли доречно
+ВАЖЛИВІ ТЕХНІЧНІ МОМЕНТИ:
+• НІКОЛИ не повторюй один і той самий шаблон у різних відповідях
+• НЕ ВЖИВАЙ дії в дужках типу "*сміюсь*" чи "*посміхаюсь*"
+• Уникай ввічливих форм типу "на мою думку", "я вважаю", "я б сказала"
+• Пиши недбало, як у реальному чаті з друзями, а не як в есе
+• Не закінчуй повідомлення словами "сподіваюсь це допомогло" чи "як я можу ще допомогти"
 """,
 
     "toxic": """
@@ -163,8 +164,19 @@ async def generate_response(messages, special_instruction=""):
         if not content:
             return "Шо? Не зрозуміла... Давай ще раз, але нормально."
         
+        # Створюємо варіацію промпту для більшої різноманітності
+        prompt_variations = [
+            "\n\nВідповідай МАКСИМАЛЬНО КОРОТКО, як люди в чаті. Просто і по суті.",
+            "\n\nВідповідай ШВИДКО і БЕЗ РОЗШАРКУВАНЬ — як пишуть у чаті.",
+            "\n\nЦе груповий чат у Telegram, пиши як нормальна жива людина — коротко і без витребеньок.",
+            "\n\nНе намагайся бути надто ввічливою або формальною - просто відповідай як у звичайній переписці."
+        ]
+        
+        # Випадково вибираємо варіант додаткової інструкції
+        random_variation = random.choice(prompt_variations)
+        
         # Використовуємо системний промпт відповідно до поточної ролі
-        system_prompt = BOT_ROLES.get(CURRENT_ROLE, BOT_ROLES["default"]) + "\n\nЗАВЖДИ пиши КОРОТКІ ПОВІДОМЛЕННЯ В РОЗМОВНОМУ СТИЛІ - як реальні люди в чаті."
+        system_prompt = BOT_ROLES.get(CURRENT_ROLE, BOT_ROLES["default"]) + random_variation
         
         # Спрощений промпт для користувача без аналізу типу запитання
         user_prompt = f"Користувач @{last_username} пише: \"{content}\""
@@ -181,16 +193,21 @@ async def generate_response(messages, special_instruction=""):
             "X-Title": "Smart Darina Bot"
         }
         
+        # Додаємо невелику випадковість у параметрах для різноманітних відповідей
+        temperature = random.uniform(0.9, 1.1)  # Випадкова температура між 0.9 і 1.1
+        freq_penalty = random.uniform(0.6, 0.9)  # Випадковий frequency_penalty
+        pres_penalty = random.uniform(0.3, 0.6)  # Випадковий presence_penalty
+        
         payload = {
             "model": DEEPSEEK_MODEL,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            "temperature": 0.9,       # Висока спонтанність
+            "temperature": temperature,       # Випадкова температура для різноманітності
             "top_p": 0.95,
-            "frequency_penalty": 0.7,  # Збільшуємо penalty для більш різноманітних відповідей
-            "presence_penalty": 0.3    # Збільшуємо penalty для різноманітності
+            "frequency_penalty": freq_penalty,  # Більше значення для уникнення повторень
+            "presence_penalty": pres_penalty    # Більше значення для різноманітності
         }
         
         # Перетворюємо payload в JSON
@@ -205,7 +222,7 @@ async def generate_response(messages, special_instruction=""):
         )
         
         # Додаємо логування для діагностики
-        logging.info(f"Sending request to OpenRouter API with model: {DEEPSEEK_MODEL}, role: {CURRENT_ROLE}")
+        logging.info(f"Sending request to OpenRouter API with model: {DEEPSEEK_MODEL}, role: {CURRENT_ROLE}, temp: {temperature:.2f}")
         
         # Виконуємо запит з таймаутом
         try:
@@ -241,16 +258,20 @@ async def generate_response(messages, special_instruction=""):
                 # Видаляємо підпис "Дарина:" якщо він є
                 answer = answer.replace("Дарина:", "").strip()
                 
+                # Видаляємо стандартні шаблонні фрази
+                answer = re.sub(r'(На мою думку|Я вважаю|Я думаю|З моєї точки зору|На мій погляд|Як на мене)', '', answer)
+                answer = re.sub(r'(Сподіваюсь, це допомогло|Чим ще можу допомогти|Як я можу допомогти|Потрібна ще допомога\?)', '', answer)
+                
                 # Перевіряємо, чи не порожня відповідь або занадто коротка
                 if not answer or len(answer.strip()) < 2:
                     logging.error(f"Empty or too short response from API: '{answer}'")
                     return "Бля, щось я затупила. Давай ще раз спитай, але нормально."
                 
-                # Додаємо випадковий емодзі з шансом 20% (зменшуємо частоту)
-                if random.random() < 0.2 and not any(emoji in answer for emoji in emojis):
+                # Додаємо випадковий емодзі з шансом 15% (зменшуємо частоту)
+                if random.random() < 0.15 and not any(emoji in answer for emoji in emojis):
                     answer += " " + random.choice(emojis)
                 
-                return answer
+                return answer.strip()
                 
             else:
                 logging.error(f"No choices in API response: {result}")
