@@ -343,20 +343,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         and update.message.reply_to_message.from_user.id == context.bot.id
     )
     
-    # Додаємо дуже рідкісний шанс втручання (0.0001%)
-    random_intervention = random.random() < 0.000001
-
-    # Отримуємо текст повідомлення, на яке відповіли (якщо є)
+    # Шанс випадкового втручання - збільшуємо до 0.001%
+    random_intervention = random.random() < 0.00001
+    
+    # Отримуємо текст повідомлення та інформацію про автора
     replied_text = ""
     replied_user = None
     
     if update.message.reply_to_message and update.message.reply_to_message.text:
         replied_text = update.message.reply_to_message.text
         replied_user = update.message.reply_to_message.from_user.username or update.message.reply_to_message.from_user.first_name
-        
-    # Перевіряємо, чи є reply на будь-яке повідомлення (не тільки для скорочення)
-    is_reply_to_message = bool(replied_text)
 
+    # Додаємо повідомлення до історії чату
     chat_history.append({
         "timestamp": datetime.now(),
         "message": message,
@@ -368,8 +366,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(chat_history) > 30:
         chat_history.pop(0)
 
-    # Відповідаємо, якщо є згадка, відповідь на повідомлення бота, або дуже рідкісне втручання
-    if is_direct_mention or is_reply_to_bot or random_intervention or is_reply_to_message:
+    # ТЕПЕР ВИЗНАЧАЄМО ЧИ БУДЕ БОТ ВІДПОВІДАТИ
+    should_respond = False
+    reply_to_message_id = update.message.message_id  # За замовчуванням - на повідомлення користувача
+    
+    # 1. Якщо пряма згадка або реплай на бота - відповідаємо
+    if is_direct_mention or is_reply_to_bot:
+        should_respond = True
+    
+    # 2. Випадкове втручання - відповідаємо НА ПОВІДОМЛЕННЯ ІНШОГО КОРИСТУВАЧА
+    elif random_intervention and not update.message.reply_to_message:
+        should_respond = True
+        logging.info("Random intervention triggered!")
+        
+    # Якщо треба відповідати
+    if should_respond:
         await context.bot.send_chat_action(update.effective_chat.id, action="typing")
         
         # Якщо це рідкісне втручання, додаємо спеціальний контекст
@@ -392,8 +403,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Додаємо інформацію про текст повідомлення, на яке відповіли
         special_instruction = ""
         
-        # Якщо є reply на повідомлення
-        if is_reply_to_message:
+        # Якщо є reply на повідомлення і бот повинен відповідати (згадка або reply до бота)
+        if replied_text and (is_direct_mention or is_reply_to_bot):
             # Перевіряємо, чи це специфічний запит на скорочення
             is_summarize_request = any(word in message.lower() for word in ["скороти", "скорочено", "резюме", "суть", "підсумуй"])
             
@@ -418,7 +429,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         try:
             # Відправляємо повне повідомлення без обмежень
-            await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
+            await update.message.reply_text(response, reply_to_message_id=reply_to_message_id)
         except Exception as e:
             # Якщо повідомлення занадто довге для Telegram (обмеження API),
             # розбиваємо його на частини по 4000 символів (ліміт Telegram API)
@@ -430,7 +441,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try:
                         # Для першого фрагмента використовуємо reply_to_message_id
                         if i == 0:
-                            await update.message.reply_text(chunk, reply_to_message_id=update.message.message_id)
+                            await update.message.reply_text(chunk, reply_to_message_id=reply_to_message_id)
                         else:
                             # Для наступних - просто відправляємо як продовження
                             await context.bot.send_message(chat_id=update.effective_chat.id, text=chunk)
@@ -438,7 +449,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         logging.error(f"Помилка при відправці частини повідомлення: {str(chunk_error)}")
             else:
                 # Якщо помилка не через довжину, спробуємо надіслати коротке повідомлення про помилку
-                await update.message.reply_text("Йоб****, щось пішло не так. Спробуй ще раз.", reply_to_message_id=update.message.message_id)
+                await update.message.reply_text("Йоб****, щось пішло не так. Спробуй ще раз.", reply_to_message_id=reply_to_message_id)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Йоу, шо треба? 😎")
